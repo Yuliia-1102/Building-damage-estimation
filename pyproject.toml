@@ -10,10 +10,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Segmentation weights. Intel macs only have torch wheels up to 2.2.2.
+# Segmentation model. Versions the weights were tested with; Intel macs have no torch wheels after 2.2.2.
+# timm is pinned because a newer one could rename the ViT layers and break loading the state_dict.
 ml = [
-    "torch==2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
-    "torch>=2.2; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "torch==2.2.2",
+    "torchvision==0.17.2",
+    "timm==1.0.30",
 ]
 
 [dependency-groups]

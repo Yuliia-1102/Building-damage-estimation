@@ -2,13 +2,13 @@
 # API keys do NOT go here - see .env.example.
 
 [paths]
-weights = "weights/segmentation.pt"
+weights = "weights/dinov2_b2b_6class.pt"
 cache = "cache"
 cases = "data/cases"
 output = "output"
 
 [segmentation]
-# Longest side the image is resized to before inference (task 2.4). Placeholder until weights are known.
+# Not used yet: the model tiles the full-size photo into 518 px crops. Downscaling would cut CPU time (task 2.4).
 input_size = 1024
 
 [suitability]

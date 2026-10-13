@@ -1,8 +1,9 @@
 """Run assess() from the command line (task 1.5).
 
-    python cli.py <folder or image> [--masks DIR] [--json]
+    python cli.py <folder or image> [--masks DIR | --stub] [--json]
 
---masks DIR uses ready-made masks (e.g. from tools/cvat.py) instead of the model.
+By default the trained model is used (weights path in config.toml).
+--masks DIR uses ready-made masks (e.g. from tools/cvat.py), --stub a fake mask without weights.
 """
 import argparse
 import dataclasses
@@ -52,7 +53,9 @@ def to_json(r: Report) -> str:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("input", type=Path, help="case folder or a single image")
-    p.add_argument("--masks", type=Path, help="folder with ready-made masks instead of the model")
+    src = p.add_mutually_exclusive_group()
+    src.add_argument("--masks", type=Path, help="folder with ready-made masks instead of the model")
+    src.add_argument("--stub", action="store_true", help="fake segmentation, no weights needed")
     p.add_argument("--json", action="store_true", help="print JSON instead of text")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
@@ -60,7 +63,13 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING,
                         format="%(levelname)s %(name)s: %(message)s")
 
-    segmenter = MaskFolderSegmenter(args.masks) if args.masks else StubSegmenter()
+    if args.masks:
+        segmenter = MaskFolderSegmenter(args.masks)
+    elif args.stub:
+        segmenter = StubSegmenter()
+    else:
+        from models.dinov2_unet import DinoV2Segmenter
+        segmenter = DinoV2Segmenter()
     report = assess(case_from_folder(args.input), segmenter,
                     building_estimator=StubBuildingParams(), decision_layer=StubDecisionLayer())
     if args.json:

@@ -15,11 +15,21 @@ cp .env.example .env    # then fill in the API key
 uv run pytest
 ```
 
+## Model weights
+
+The segmentation model is the DINOv2-Emb U-Net from Lysanets et al., *Applied Artificial
+Intelligence* 40(1), 2026, e2685357. The weights (`dinov2_b2b_6class.pt`, 1.26 GB) are too large
+for git: put the file into `weights/` (path set in `config.toml`). The ConvNeXt-L CLIP embedder
+(~800 MB) is downloaded by `timm` from Hugging Face on the first run and cached.
+
+On CPU one photo takes 25-60 s (it is tiled into 518 px crops); loading the model takes ~15 s.
+
 ## Run
 
 ```bash
 # a folder of photos = one case; a single image also works
-uv run python cli.py data/cases/<case>            # stub segmenter
+uv run python cli.py data/cases/<case>            # trained model
+uv run python cli.py data/cases/<case> --stub     # fake masks, no weights needed
 uv run python cli.py data/cases/<case> --json
 
 # run on ground-truth masks from the CVAT dataset instead of the model
@@ -40,7 +50,10 @@ core/            all logic; the UI and the CLI only call assess()
   imageio.py     loading with EXIF rotation, mask overlay and colour legend
   case.py        building a Case from files
   config.py      reads config.toml
-models/          implementations of the interfaces (stub.py: stubs for tests and development)
+models/          implementations of the interfaces
+  dinov2_unet.py trained segmentation model behind SegmentationModel
+  damage_seg.py  the model itself, copied unchanged from the paper code
+  stub.py        stubs for tests and development
 tools/cvat.py    CVAT XML export -> 6-class masks
 ui/              Streamlit app
 tests/
