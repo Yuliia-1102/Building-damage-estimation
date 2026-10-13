@@ -1,0 +1,41 @@
+# All tunable numbers live here. Every value says where it came from.
+# API keys do NOT go here - see .env.example.
+
+[paths]
+weights = "weights/segmentation.pt"
+cache = "cache"
+cases = "data/cases"
+output = "output"
+
+[segmentation]
+# Longest side the image is resized to before inference (task 2.4). Placeholder until weights are known.
+input_size = 1024
+
+[suitability]
+# A frame counts for a surface only if that surface takes at least this share of the frame (task 3.3).
+# Placeholder, tuned on the test set in task 9.5.
+min_facade_share = 0.05
+min_roof_share = 0.05
+
+[geometry]
+default_floor_height_m = 3.0    # plan.txt, section 4
+roof_shape_coef_pitched = 1.15  # plan.txt, section 5
+roof_shape_coef_flat = 1.0
+
+[uncertainty]
+# Relative half-width of the range = scale_error + coverage_coef / views (task 3.6).
+scale_error = 0.15   # plan.txt, section 4: ~15% from estimated scale
+coverage_coef = 0.30 # placeholder, tuned in task 9.5
+
+[confidence]
+# Escalation boundaries (task 6.6). Placeholders.
+high = 0.75
+low = 0.45
+
+[video]
+frame_interval_s = 1.0  # task 8.1
+blur_threshold = 100.0  # variance of Laplacian, task 8.2
+views_k = 5             # task 8.4, between 4 and 6
+
+[prices]
+max_candidates = 10     # task 5.5

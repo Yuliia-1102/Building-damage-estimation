@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Secrets
+.env
+
+# Model weights
+weights/
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.safetensors
+
+# Local data, cache and outputs
+data/*
+!data/.gitkeep
+!data/cases/
+data/cases/*
+!data/cases/.gitkeep
+cache/
+output/
+*.zip
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
