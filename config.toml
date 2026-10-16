@@ -39,3 +39,8 @@ views_k = 5             # task 8.4, between 4 and 6
 
 [prices]
 max_candidates = 10     # task 5.5
+
+[decision]
+# Gemini model for the decision layer; check available names with client.models.list().
+model = "gemini-2.5-flash"
+seed = 42   # fixed with temperature 0, for repeatable answers (task 9.4)

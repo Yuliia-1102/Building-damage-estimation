@@ -30,12 +30,29 @@ On CPU one photo takes 25-60 s (it is tiled into 518 px crops); loading the mode
 # a folder of photos = one case; a single image also works
 uv run python cli.py data/cases/<case>            # trained model
 uv run python cli.py data/cases/<case> --stub     # fake masks, no weights needed
+uv run python cli.py data/cases/<case> --gemini   # real decision layer, needs GEMINI_API_KEY in .env
 uv run python cli.py data/cases/<case> --json
+uv run python cli.py data/cases/<case> --clear-cache   # drop cached masks and model answers
 
 # run on ground-truth masks from the CVAT dataset instead of the model
 uv run python -m tools.cvat ../Dataset_CVAT/annotations.xml data/cvat_masks
 uv run python cli.py data/cases/<case> --masks data/cvat_masks
 ```
+
+## Cache
+
+Masks are cached in `cache/masks/` by the content hash of the photo, and decision-layer answers in
+`cache/decisions/` by the hash of the prompt. A repeated run costs well under a second instead of
+~40 s per photo. `--no-cache` bypasses it, `--clear-cache` deletes it.
+
+## Decision layer
+
+The language model receives only numbers (damage ratios, areas, floor count) and returns three
+fixed fields, validated against a schema: condition category 1-4 (ДСТУ-Н Б В.1.2-18:2016), a
+confidence, and work type codes from `core/reference.py`. A malformed answer is retried. The
+quantity of each work is the damaged area of its surface, computed by code, never by the model.
+Confidence decides what the report shows: the category, the category flagged for an engineer,
+or no classification (`[confidence]` in the config).
 
 ## Structure
 
@@ -49,10 +66,14 @@ core/            all logic; the UI and the CLI only call assess()
   geometry.py    ratios -> m2, uncertainty range
   imageio.py     loading with EXIF rotation, mask overlay and colour legend
   case.py        building a Case from files
+  cache.py       on-disk cache for masks and model answers
+  decision.py    work quantities and confidence escalation (code, not the model)
+  reference.py   condition categories and work types the model chooses from
   config.py      reads config.toml
 models/          implementations of the interfaces
   dinov2_unet.py trained segmentation model behind SegmentationModel
   damage_seg.py  the model itself, copied unchanged from the paper code
+  gemini_decision.py  decision layer on the Gemini API: prompt, schema, retry
   stub.py        stubs for tests and development
 tools/cvat.py    CVAT XML export -> 6-class masks
 ui/              Streamlit app
@@ -87,5 +108,6 @@ Visible facade = 1 + 3 + 4, visible roof = 2 + 5.
 | confidence    | high, low                         | escalation boundaries for the decision layer |
 | video         | frame_interval_s, blur_threshold, views_k | frame extraction and view selection |
 | prices        | max_candidates                    | cap on catalogue items passed to the model |
+| decision      | model, seed                       | Gemini model name; fixed seed with temperature 0 for repeatable answers |
 
 API keys live in `.env`, never in the config.

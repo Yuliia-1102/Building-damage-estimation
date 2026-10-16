@@ -92,17 +92,19 @@ class DamagedAreas:
 
 @dataclass
 class WorkItem:
-    work_type: str          # e.g. "facade_plaster_repair"
-    material_type: str
-    quantity: float
-    unit: str               # "m2", "pcs", ...
+    work_type: str          # code from core.reference.WORK_TYPES, e.g. "facade_plaster_repair"
+    damage_class: str       # which damaged surface it repairs, e.g. "damaged_facade"
+    quantity: float | None  # m2, computed by code from DamagedAreas; None if the area is unknown
+    unit: str = "m2"
 
 
 @dataclass
 class Decision:
-    category: str           # from the condition category scale (task 6.3)
+    category: int           # 1..4, core.reference.CATEGORIES (task 6.3)
+    category_name: str
     confidence: float       # 0..1
     works: list[WorkItem]
+    escalation: str = "show"   # "show" | "inspect" | "not_classified" (task 6.6)
 
 
 @dataclass

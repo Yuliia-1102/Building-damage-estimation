@@ -51,5 +51,14 @@ class StubBuildingParams:
 
 
 class StubDecisionLayer:
+    """Fixed answer: category 2, every work type whose surface has damage."""
+
     def decide(self, ratios: CombinedRatios, areas: DamagedAreas | None, building) -> Decision:
-        return Decision(category="stub", confidence=0.0, works=[])
+        from core.decision import escalation_level, works_with_quantities
+        from core.reference import CATEGORIES, WORK_TYPES
+
+        damaged = {"damaged_facade": ratios.damaged_facade, "broken_window": ratios.broken_window,
+                   "damaged_roof": ratios.damaged_roof}
+        codes = [w.code for w in WORK_TYPES if damaged[w.damage_class.name.lower()]]
+        return Decision(category=2, category_name=CATEGORIES[2][0], confidence=0.6,
+                        works=works_with_quantities(codes, areas), escalation=escalation_level(0.6))
