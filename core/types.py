@@ -159,6 +159,7 @@ class CostEstimate:
     currency: str = "UAH"
     as_of: str | None = None
     skipped_works: list[str] = field(default_factory=list)   # works with unknown area or no price
+    price_source: str = ""      # where the prices came from, shown in the report
 
 
 # ---------- output ----------
@@ -175,4 +176,5 @@ class Report:
     decision: Decision | None = None
     cost: CostEstimate | None = None
     skipped_frames: dict[int, str] = field(default_factory=dict)   # view_id -> error
+    errors: list[str] = field(default_factory=list)                # steps that failed, shown in the report
     masks: dict[int, np.ndarray] = field(default_factory=dict, repr=False)

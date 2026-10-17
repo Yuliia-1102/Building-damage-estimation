@@ -45,4 +45,4 @@ def estimate_cost(works: list[WorkItem], prices: PriceSource, views: int,
     total = sum(line.cost for line in lines)
     low, high = geometry.value_range(total, views)
     return CostEstimate(lines=lines, total=total, low=low, high=high, as_of=as_of.isoformat(),
-                        skipped_works=skipped)
+                        skipped_works=skipped, price_source=getattr(prices, "label", ""))

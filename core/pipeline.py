@@ -80,8 +80,12 @@ def evaluate(seg: Segmentation,
 
     if building is None and building_estimator is not None and seg.frames:
         ids = [f.view_id for f in seg.frames]
-        building = building_estimator.estimate([seg.images[i] for i in ids], [seg.masks[i] for i in ids])
-        log.info("building parameters estimated: %s", building)
+        try:
+            building = building_estimator.estimate([seg.images[i] for i in ids], [seg.masks[i] for i in ids])
+            log.info("building parameters estimated: %s", building)
+        except Exception as e:   # a failed step is reported, the rest of the report is still produced
+            log.exception("building parameters failed")
+            report.errors.append(f"building parameters: {e}")
     report.building = building
 
     if building is not None and building.width_m is not None and building.height_m is not None:
@@ -89,8 +93,12 @@ def evaluate(seg: Segmentation,
         log.info("damaged areas: %s", report.areas)
 
     if decision_layer is not None and seg.frames:
-        report.decision = decision_layer.decide(report.ratios, report.areas, report.building)
-        log.info("decision: %s", report.decision)
+        try:
+            report.decision = decision_layer.decide(report.ratios, report.areas, report.building)
+            log.info("decision: %s", report.decision)
+        except Exception as e:
+            log.exception("decision layer failed")
+            report.errors.append(f"decision layer: {e}")
 
     if price_source is not None and report.decision is not None:
         from core.cost import estimate_cost

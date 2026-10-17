@@ -5,11 +5,14 @@ description = "From photos of a damaged building to a preliminary cost estimate"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "fpdf2>=2.8.9",
     "google-genai>=1.0",
     "numpy>=1.26,<2",
     "pillow>=10",
+    "pyarrow>=17,<20",
     "pydantic>=2",
     "python-dotenv>=1.2.4",
+    "streamlit>=1.66.0",
 ]
 
 [project.optional-dependencies]
