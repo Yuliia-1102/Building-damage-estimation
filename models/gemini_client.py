@@ -1,0 +1,69 @@
+"""Shared Gemini plumbing: one structured JSON answer, validated, retried and cached.
+
+Used by the decision layer and by the building parameters estimator, so both get the same
+schema validation (task 6.1), retry on a malformed answer (6.1.3) and answer cache (6.2.3).
+"""
+import json
+import logging
+import os
+
+from pydantic import BaseModel, ValidationError
+
+from core import cache, config
+
+log = logging.getLogger(__name__)
+
+
+def make_client():
+    from dotenv import load_dotenv
+    from google import genai
+    load_dotenv()
+    if not os.environ.get("GEMINI_API_KEY"):
+        raise RuntimeError("GEMINI_API_KEY is not set, see .env.example")
+    return genai.Client()
+
+
+class GeminiJSON:
+    def __init__(self, client=None, model: str | None = None, retries: int = 2, use_cache: bool = True):
+        self.client = client or make_client()
+        self.model = model or config.get("decision", "model")
+        self.retries = retries
+        self.use_cache = use_cache
+
+    def _call(self, contents: list, schema: type[BaseModel], system: str) -> str:
+        from google.genai import types
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type="application/json",
+                response_schema=schema,
+                temperature=0.0,
+                seed=config.get("decision", "seed"),
+            ),
+        )
+        return response.text
+
+    def ask(self, contents: list, schema: type[BaseModel], system: str, namespace: str, key_parts: list[str]):
+        """contents: text and image parts for the request. key_parts: what identifies the request in the cache
+        (the prompt text and the hashes of any images)."""
+        key = cache.text_key("\n".join([self.model, system, *key_parts]))
+        if self.use_cache and (hit := cache.get_json(namespace, key)) is not None:
+            return schema.model_validate(hit)
+
+        last_error = None
+        for attempt in range(1, self.retries + 2):
+            raw = self._call(contents, schema, system)
+            try:
+                answer = schema.model_validate_json(raw)
+                break
+            except ValidationError as e:
+                last_error = e
+                log.warning("%s attempt %d: response does not match the schema: %s", namespace, attempt, raw)
+        else:
+            raise ValueError(f"no valid {namespace} answer after {self.retries + 1} attempts") from last_error
+
+        if self.use_cache:
+            cache.put_json(namespace, key, json.loads(answer.model_dump_json()))
+        return answer

@@ -1,0 +1,12 @@
+work_type,material_id,quantity_per_unit
+facade_plaster_repair,1,18
+facade_plaster_repair,2,0.2
+facade_masonry_repair,4,51
+facade_masonry_repair,5,40
+facade_painting,2,0.15
+facade_painting,3,0.3
+window_glazing_replacement,6,1
+window_unit_replacement,7,1
+roof_covering_repair,8,1.1
+roof_covering_replacement,9,1.15
+roof_covering_replacement,10,3

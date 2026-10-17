@@ -25,11 +25,16 @@ def works_with_quantities(codes: list[str], areas: DamagedAreas | None) -> list[
 
 
 def escalation_level(confidence: float, high: float | None = None, low: float | None = None) -> str:
-    """High confidence: show the conclusion. Medium: show it, flagged for an engineer. Low: do not classify."""
+    """How far the categories can be trusted when ordering buildings for inspection.
+
+    Every building is inspected on site eventually; this only says whether its place in the queue is reliable.
+    confirmed: use the category as is. preliminary: do not move the building to the end of the queue
+    because of a mild category. insufficient_data: no category; add photos from other sides.
+    """
     high = config.get("confidence", "high") if high is None else high
     low = config.get("confidence", "low") if low is None else low
     if confidence >= high:
-        return "show"
+        return "confirmed"
     if confidence >= low:
-        return "inspect"
-    return "not_classified"
+        return "preliminary"
+    return "insufficient_data"

@@ -59,21 +59,22 @@ class FakeClient:
         return SimpleNamespace(text=self.answers.pop(0))
 
 
-GOOD = json.dumps({"category": 3, "confidence": 0.8,
+GOOD = json.dumps({"damage_category": "II", "condition_category": 3, "confidence": 0.8,
                    "work_types": ["facade_masonry_repair", "window_unit_replacement"]})
 
 
 def test_decision_retries_on_invalid_answer_and_computes_quantities():
-    client = FakeClient('{"category": 7}', GOOD)
+    client = FakeClient('{"damage_category": "IV", "condition_category": 7}', GOOD)
     d = GeminiDecisionLayer(client=client, model="fake").decide(RATIOS, AREAS, None)
     assert client.calls == 2
-    assert d.category == 3 and d.escalation == "show"
+    assert d.damage_category == "II" and d.condition_category == 3 and d.escalation == "confirmed"
     assert [(w.work_type, w.quantity) for w in d.works] == [
         ("facade_masonry_repair", 300), ("window_unit_replacement", 100)]
 
 
 def test_unknown_work_type_is_rejected():
-    bad = json.dumps({"category": 2, "confidence": 0.5, "work_types": ["paint_the_moon"]})
+    bad = json.dumps({"damage_category": "I", "condition_category": 2, "confidence": 0.5,
+                      "work_types": ["paint_the_moon"]})
     with pytest.raises(ValueError):
         GeminiDecisionLayer(client=FakeClient(bad, bad, bad), model="fake").decide(RATIOS, AREAS, None)
 
@@ -97,6 +98,24 @@ def test_quantity_unknown_without_areas():
 
 
 def test_escalation_levels():
-    assert escalation_level(0.9, high=0.75, low=0.45) == "show"
-    assert escalation_level(0.6, high=0.75, low=0.45) == "inspect"
-    assert escalation_level(0.2, high=0.75, low=0.45) == "not_classified"
+    assert escalation_level(0.9, high=0.75, low=0.45) == "confirmed"
+    assert escalation_level(0.6, high=0.75, low=0.45) == "preliminary"
+    assert escalation_level(0.2, high=0.75, low=0.45) == "insufficient_data"
+
+
+def test_roof_covering_category_follows_table_v71():
+    from core.reference import roof_covering_category
+    assert roof_covering_category(None) is None
+    assert roof_covering_category(0.0) == 1
+    assert roof_covering_category(0.30) == 3
+    assert roof_covering_category(0.41) == 4
+
+
+def test_prompt_has_worst_view_and_vertical_split():
+    r = CombinedRatios(damaged_facade=0.2, broken_window=0.05, damaged_roof=0.5, facade_views=3, roof_views=1,
+                       worst_facade_view=2, worst_facade_damage=0.6, worst_roof_view=1, worst_roof_damage=0.5,
+                       damage_by_third=[0.7, 0.2, 0.1])
+    prompt = build_prompt(r, None, None)
+    assert "worst single view of the facade: 60.0%" in prompt
+    assert "lower third 70%" in prompt
+    assert "table В.7.1): category 4" in prompt

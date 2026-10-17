@@ -1,0 +1,8 @@
+code,damage_class,name,unit
+facade_plaster_repair,damaged_facade,Facade plaster repair,m2
+facade_masonry_repair,damaged_facade,Masonry wall repair,m2
+facade_painting,damaged_facade,Facade painting,m2
+window_glazing_replacement,broken_window,Glazing replacement,m2
+window_unit_replacement,broken_window,Window unit replacement,m2
+roof_covering_repair,damaged_roof,Roof covering repair,m2
+roof_covering_replacement,damaged_roof,Roof covering replacement,m2

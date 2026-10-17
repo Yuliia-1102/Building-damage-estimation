@@ -21,6 +21,20 @@ def _ratio(num: int, den: int) -> float | None:
     return num / den if den > 0 else None
 
 
+BUILDING_CLASSES = [Cls.FACADE, Cls.ROOF, Cls.DAMAGED_FACADE, Cls.BROKEN_WINDOW, Cls.DAMAGED_ROOF]
+
+
+def damage_by_third(mask: np.ndarray) -> list[int]:
+    """Facade damage pixels in the lower, middle and upper third of the building's vertical extent."""
+    rows = np.flatnonzero(np.isin(mask, BUILDING_CLASSES).any(axis=1))
+    if rows.size == 0:
+        return [0, 0, 0]
+    top, bottom = rows[0], rows[-1] + 1
+    damaged = np.isin(mask[top:bottom], [Cls.DAMAGED_FACADE, Cls.BROKEN_WINDOW]).sum(axis=1)
+    upper, middle, lower = (int(part.sum()) for part in np.array_split(damaged, 3))
+    return [lower, middle, upper]
+
+
 def frame_metrics(view_id: int, mask: np.ndarray,
                   min_facade_share: float | None = None,
                   min_roof_share: float | None = None) -> FrameMetrics:
@@ -57,6 +71,7 @@ def frame_metrics(view_id: int, mask: np.ndarray,
         facade_usable=facade_usable,
         roof_usable=roof_usable,
         excluded_reasons=reasons,
+        damage_by_third=damage_by_third(mask),
     )
 
 
@@ -72,10 +87,24 @@ def combine(frames: list[FrameMetrics]) -> CombinedRatios:
     facade_den = sum(f.facade_px for f in facade)
     roof_den = sum(f.roof_px for f in roof)
 
+    def facade_damage(f: FrameMetrics) -> float:
+        return (f.counts[Cls.DAMAGED_FACADE] + f.counts[Cls.BROKEN_WINDOW]) / f.facade_px
+
+    worst_facade = max(facade, key=facade_damage, default=None)
+    worst_roof = max(roof, key=lambda f: f.damaged_roof_ratio, default=None)
+
+    thirds = [sum(f.damage_by_third[i] for f in facade) for i in range(3)]
+    total = sum(thirds)
+
     return CombinedRatios(
         damaged_facade=_ratio(sum(f.counts[Cls.DAMAGED_FACADE] for f in facade), facade_den),
         broken_window=_ratio(sum(f.counts[Cls.BROKEN_WINDOW] for f in facade), facade_den),
         damaged_roof=_ratio(sum(f.counts[Cls.DAMAGED_ROOF] for f in roof), roof_den),
         facade_views=len(facade),
         roof_views=len(roof),
+        worst_facade_view=worst_facade.view_id if worst_facade else None,
+        worst_facade_damage=facade_damage(worst_facade) if worst_facade else None,
+        worst_roof_view=worst_roof.view_id if worst_roof else None,
+        worst_roof_damage=worst_roof.damaged_roof_ratio if worst_roof else None,
+        damage_by_third=[t / total for t in thirds] if total else None,
     )

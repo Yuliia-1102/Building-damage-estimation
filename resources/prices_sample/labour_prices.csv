@@ -1,0 +1,8 @@
+work_type,value,currency,valid_from,source
+facade_plaster_repair,350,UAH,2026-01-01,SAMPLE
+facade_masonry_repair,900,UAH,2026-01-01,SAMPLE
+facade_painting,150,UAH,2026-01-01,SAMPLE
+window_glazing_replacement,400,UAH,2026-01-01,SAMPLE
+window_unit_replacement,800,UAH,2026-01-01,SAMPLE
+roof_covering_repair,250,UAH,2026-01-01,SAMPLE
+roof_covering_replacement,450,UAH,2026-01-01,SAMPLE

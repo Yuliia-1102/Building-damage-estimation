@@ -27,9 +27,16 @@ class DecisionLayer(Protocol):
 
 
 class PriceSource(Protocol):
+    """Mirrors the materials database: work_type, material, work_material, price (with history)."""
+
     def get_items_by_work_type(self, work_type: str, limit: int) -> list[dict]:
-        """Catalogue items suitable for a work type: dicts with at least id, name, unit."""
+        """Materials used by a work type: dicts with id, name, unit, quantity_per_unit (per 1 unit of work)."""
         ...
 
-    def get_price_as_of(self, item_id: int, as_of: date) -> float:
+    def get_price_as_of(self, item_id: int, as_of: date) -> tuple[float, str] | None:
+        """(price per unit, date the price is valid from) for the latest price on or before as_of."""
+        ...
+
+    def get_labour_price_as_of(self, work_type: str, as_of: date) -> tuple[float, str] | None:
+        """Labour price per unit of work, if the source has one."""
         ...

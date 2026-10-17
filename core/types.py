@@ -50,6 +50,8 @@ class FrameMetrics:
     facade_usable: bool
     roof_usable: bool
     excluded_reasons: list[str] = field(default_factory=list)
+    # damaged facade + broken window pixels in the lower / middle / upper third of the building's height
+    damage_by_third: list[int] = field(default_factory=lambda: [0, 0, 0])
 
 
 @dataclass
@@ -60,9 +62,18 @@ class CombinedRatios:
     damaged_roof: float | None
     facade_views: int                       # how many frames contributed to the facade ratios
     roof_views: int
+    # The worst single view: the building's category is set by its worst structure (ДСТУ 9273, 5.3),
+    # and an average over views can hide one destroyed side.
+    worst_facade_view: int | None = None
+    worst_facade_damage: float | None = None    # damaged facade + broken windows, share of visible facade
+    worst_roof_view: int | None = None
+    worst_roof_damage: float | None = None
+    # Share of facade damage in the lower / middle / upper third of the building (ДСТУ 9273, 11.26:
+    # damage to the lower floors is more dangerous). None when there is no facade damage.
+    damage_by_third: list[float] | None = None
 
 
-# ---------- building parameters (epic 4, owned by a teammate) ----------
+# ---------- building parameters (epic 4) ----------
 
 @dataclass
 class BuildingParams:
@@ -71,12 +82,17 @@ class BuildingParams:
     width_m: float | None
     depth_m: float | None
     roof_shape_coef: float
+    structure_type: str | None = None       # core.reference.STRUCTURE_TYPES, ДСТУ 9273 clause 11.25
+    roof_type: str | None = None            # "flat" | "pitched"
+    height_override_m: float | None = None  # height from a reference object when floors cannot be read
     auto_detected: set[str] = field(default_factory=set)   # names of fields filled automatically
     assumptions: list[str] = field(default_factory=list)   # e.g. "depth assumed equal to width"
 
     @property
     def height_m(self) -> float | None:
-        return None if self.floors is None else self.floors * self.floor_height_m
+        if self.floors is not None:
+            return self.floors * self.floor_height_m
+        return self.height_override_m
 
 
 @dataclass
@@ -100,19 +116,35 @@ class WorkItem:
 
 @dataclass
 class Decision:
-    category: int           # 1..4, core.reference.CATEGORIES (task 6.3)
-    category_name: str
-    confidence: float       # 0..1
+    damage_category: str        # "I" | "II" | "III", core.reference.DAMAGE_CATEGORIES - the main triage result
+    condition_category: int     # 1..4, core.reference.CONDITION_CATEGORIES
+    confidence: float           # 0..1
     works: list[WorkItem]
-    escalation: str = "show"   # "show" | "inspect" | "not_classified" (task 6.6)
+    # How far the categories can be trusted for ordering inspections (task 6.6):
+    # "confirmed" | "preliminary" | "insufficient_data"
+    escalation: str = "confirmed"
+    roof_covering_category: int | None = None   # computed in code from table В.7.1, not by the model
+
+    @property
+    def damage_name(self) -> str:
+        from core.reference import DAMAGE_CATEGORIES
+        return DAMAGE_CATEGORIES[self.damage_category][0]
+
+    @property
+    def condition_name(self) -> str:
+        from core.reference import CONDITION_CATEGORIES
+        return CONDITION_CATEGORIES[self.condition_category][0]
 
 
 @dataclass
 class CostLine:
-    work: WorkItem
-    item_name: str
+    work_type: str          # which work this line belongs to
+    item_name: str          # a material, or "labour"
+    quantity: float         # in the item's unit, for the whole damaged area
+    unit: str
     unit_price: float
     cost: float
+    price_date: str | None = None   # as-of date of the price used, so the estimate is reproducible
 
 
 @dataclass
@@ -122,6 +154,8 @@ class CostEstimate:
     low: float
     high: float
     currency: str = "UAH"
+    as_of: str | None = None
+    skipped_works: list[str] = field(default_factory=list)   # works with unknown area or no price
 
 
 # ---------- output ----------

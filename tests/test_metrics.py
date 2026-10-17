@@ -76,3 +76,14 @@ def test_fewer_views_wider_range():
     lo5, hi5 = value_range(100.0, views=5, scale_error=0.15, coverage_coef=0.3)
     assert hi1 - lo1 > hi5 - lo5
     assert lo5 < 100 < hi5
+
+
+def test_worst_view_and_damage_by_third():
+    kw = dict(min_facade_share=0.05, min_roof_share=0.05)
+    m1 = np.full((90, 10), Cls.FACADE, dtype=np.uint8)
+    m1[60:90, :] = Cls.DAMAGED_FACADE                    # damage in the lower third only
+    m2 = np.full((90, 10), Cls.FACADE, dtype=np.uint8)
+    m2[0:9, :] = Cls.DAMAGED_FACADE                      # a little damage at the top
+    c = combine([frame_metrics(1, m1, **kw), frame_metrics(2, m2, **kw)])
+    assert c.worst_facade_view == 1 and c.worst_facade_damage == pytest.approx(1 / 3)
+    assert c.damage_by_third == pytest.approx([300 / 390, 0, 90 / 390])

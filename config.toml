@@ -6,6 +6,7 @@ weights = "weights/dinov2_b2b_6class.pt"
 cache = "cache"
 cases = "data/cases"
 output = "output"
+prices_csv = "resources/prices_sample"   # used until the materials database is connected
 
 [segmentation]
 # Not used yet: the model tiles the full-size photo into 518 px crops. Downscaling would cut CPU time (task 2.4).
