@@ -15,12 +15,13 @@ def case_from_paths(case_id: str, paths: list[Path]) -> Case:
     return Case(case_id=case_id, mode="photo" if len(views) == 1 else "photos", views=views)
 
 
-def case_from_video(video: Path, work_dir: Path, embedder) -> tuple[Case, dict]:
-    """Frames are extracted into work_dir, the K most different sharp ones become the views (task 8.5)."""
+def case_from_video(video: Path, work_dir: Path, quick_segmenter=None) -> tuple[Case, dict]:
+    """Frames are extracted into work_dir; one good view per time span becomes a view (task 8.5).
+    quick_segmenter (models.dinov2_unet.QuickSegmenter, cached) checks the candidates; see core/video.py."""
     from core.video import extract_frames, select_views
     video = Path(video)
     frames = extract_frames(video, Path(work_dir) / video.stem / "frames")
-    picked, info = select_views(frames, embedder)
+    picked, info = select_views(frames, quick_segmenter=quick_segmenter)
     views = [View(view_id=i, image_path=p) for i, p in enumerate(picked, start=1)]
     return Case(case_id=video.stem, mode="video", views=views), info
 

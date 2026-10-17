@@ -116,7 +116,9 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
         "(ДСТУ 9273, 11.25).",
         "- The damage category percentages refer to the whole building, including structures that are not "
         "visible; the measured shares above are only the visible surface. Do not map them one to one.",
-        "- The two answers must be consistent: I usually goes with condition 1-2, II with 3, III with 4.",
+        "- The two answers must be consistent: I goes with condition 1-2, II with 3 or 4, III with 4. Give II with 4 "
+        "when a part of the building is destroyed through its full height or its load-bearing walls are holed "
+        "(a destroyed section, a collapsed corner), even if the rest is intact.",
         "- Choose work types only for surfaces that show damage. A surface marked 'not visible' was not "
         "assessed: do not add works for it.",
         "- Works in the same alternatives group repair the same area in different ways: choose at most ONE per "

@@ -138,10 +138,12 @@ def main() -> None:
     from core.video import VIDEO_EXTS
     if args.input.suffix.lower() in VIDEO_EXTS:
         from core.case import case_from_video
-        from models.dino_embedder import DinoEmbedder
-        case, info = case_from_video(args.input, config.path("cases") / "_video", DinoEmbedder())
-        print(f"Video: {info['extracted']} frames, {info['blurred']} blurred, "
-              f"{info['near_duplicates']} near-duplicates, {info['selected']} views selected")
+        quick = cache.quick_segmenter(segmenter) if isinstance(segmenter, cache.CachedSegmenter) else None
+        case, info = case_from_video(args.input, config.path("cases") / "_video", quick)
+        print(f"Video: {info['extracted']} frames, {info['blurred']} blurred, {info['checked']} candidates "
+              f"checked, {info['selected']} views selected")
+        for name, reason in info["rejected"].items():
+            print(f"  rejected {name}: {reason}")
     else:
         case = case_from_folder(args.input)
     seg = segment_case(case, segmenter)

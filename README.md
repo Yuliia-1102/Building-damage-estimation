@@ -101,8 +101,11 @@ Prices have dates and are never overwritten. `scripts/show_prices.py` prints wha
 
 ## Video
 
-`core/video.py`: frames every second (ffmpeg), blurred ones dropped by variance of the Laplacian,
-near-duplicates dropped, then DINOv2 embeddings and greedy max-min selection of K = 5 views.
+`core/video.py`: frames every second (ffmpeg), blurred ones dropped by variance of the Laplacian; the video is
+split into K = 5 equal time spans (an orbit moves around the building, so the spans cover its sides), and in
+each span two candidates are segmented quickly (one pass at 518 px, ~5 s on CPU, cached); the one showing the
+building best wins, a frame where the building is cut off on three or four sides loses. Picking the most
+different frames (the first version) chose trees, walls at arm's length and neighbours' roofs instead.
 
 ## Test set
 
@@ -140,7 +143,7 @@ models/            implementations of the interfaces
   csv_prices.py                   price source over the sample CSV files
   price_source.py                 picks the database or the CSV source from config.toml
   offline.py                      cached Gemini answers or stubs, never a request
-  dino_embedder.py                frame embeddings for video
+  dinov2_unet.py also has QuickSegmenter: one-pass masks for choosing video frames
   stub.py                         stand-ins for tests and demo mode
 pricedb/           materials database: schema, seed data, price history, PriceSource (epic 5)
 scripts/           init_db.py, show_prices.py

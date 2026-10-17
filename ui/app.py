@@ -52,10 +52,11 @@ def get_segmenter():
     return CachedSegmenter(DinoV2Segmenter(), model_id=weights.stem), True
 
 
-@st.cache_resource(show_spinner="Завантаження моделі для порівняння кадрів…")
-def get_embedder():
-    from models.dino_embedder import DinoEmbedder
-    return DinoEmbedder()
+def get_quick_segmenter():
+    """Quick masks for choosing video frames; shares the weights with the full segmenter."""
+    from core.cache import quick_segmenter
+    segmenter, real = get_segmenter()
+    return quick_segmenter(segmenter) if real else None
 
 
 def gemini_on() -> bool:
@@ -104,7 +105,7 @@ def run_assessment(mode: str, files) -> None:
     video_info = None
     if mode == "Відео":
         bar.progress(0.05, text="Нарізка відео і відбір найрізніших кадрів…")
-        case, video_info = case_from_video(folder / Path(files[0].name).name, folder, get_embedder())
+        case, video_info = case_from_video(folder / Path(files[0].name).name, folder, get_quick_segmenter())
     else:
         case = case_from_paths(folder.name, [folder / Path(f.name).name for f in files])
 
@@ -301,8 +302,13 @@ def masks_screen():
     seg = st.session_state.seg
     info = st.session_state.get("video_info")
     if info:
-        st.info(f"Відео: нарізано {info['extracted']} кадрів, відкинуто розмитих {info['blurred']}, "
-                f"майже однакових {info['near_duplicates']}, обрано видів {info['selected']}.")
+        st.info(f"Відео: нарізано {info['extracted']} кадрів (1 за секунду), відкинуто розмитих {info['blurred']}. "
+                f"Відео поділено на рівні відрізки, щоб охопити всі сторони будівлі; у кожному перевірено кандидатів "
+                f"(усього {info['checked']}) і взято той, де будівлю видно найкраще. Обрано видів: {info['selected']}.")
+        if info.get("rejected"):
+            st.caption("Відхилені кандидати: " + "; ".join(
+                f"{name} — " + reason.replace("building cut off on", "будівля обрізана з").replace("sides", "боків")
+                .replace("no building", "будівлі не видно") for name, reason in info["rejected"].items()))
     legend = " ".join(f"<span style='background:rgb{tuple(c)};padding:2px 8px;border-radius:4px;"
                       f"color:{'#fff' if sum(c) < 400 else '#000'}'>{LEGEND_UA[n]}</span>"
                       for n, c in LEGEND.items() if n != "background")

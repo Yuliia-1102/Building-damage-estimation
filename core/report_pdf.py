@@ -17,6 +17,8 @@ from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMEN
 from core.types import Report
 
 FONT_DIR = config.ROOT / "resources" / "fonts"
+COLOR_NAMES_UA = {"facade": "зелений", "roof": "оранжевий", "damaged facade": "фіолетовий",
+                  "broken window": "синій", "damaged roof": "червоний"}
 LEGEND_UA = {"background": "фон", "facade": "фасад", "roof": "дах", "damaged facade": "пошкодження фасаду",
              "broken window": "пошкоджені вікна", "damaged roof": "пошкоджений дах"}
 
@@ -180,8 +182,8 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     if images:
         pdf.add_page()
         _h(pdf, "5. Види з розміткою")
-        _p(pdf, "Кольори: " + ", ".join(LEGEND_UA[name] for name in LEGEND if name != "background") +
-           " (див. легенду в інтерфейсі).")
+        _p(pdf, "Кольори: " + ", ".join(f"{LEGEND_UA[name]} — {COLOR_NAMES_UA[name]}"
+                                        for name in LEGEND if name != "background") + ".")
         for view_id, image in list(images.items())[:4]:
             mask = report.masks.get(view_id)
             if mask is None:

@@ -59,6 +59,12 @@ class CachedSegmenter:
         return self.inner.predict(image)
 
 
+def quick_segmenter(full: CachedSegmenter):
+    """The cached quick segmenter (view selection) sharing the weights of a cached DinoV2Segmenter."""
+    from models.dinov2_unet import QuickSegmenter
+    return CachedSegmenter(QuickSegmenter(full.inner), model_id=full.dir.name + "_quick518")
+
+
 def get_json(namespace: str, key: str, root: Path | None = None) -> dict | None:
     path = (root or cache_dir()) / namespace / f"{key}.json"
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None

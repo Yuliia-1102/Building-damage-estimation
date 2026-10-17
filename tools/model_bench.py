@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from core import cache, config, geometry, metrics
-from core.cache import CachedSegmenter
+from core.cache import CachedSegmenter, quick_segmenter
 from core.pipeline import segment_case
 from models import gemini_building as gb
 from models import gemini_decision as gd
@@ -68,18 +68,16 @@ def main():
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     from google.genai import types
-    from models.dino_embedder import DinoEmbedder
     from models.dinov2_unet import DinoV2Segmenter
 
     base = config.get("decision", "building_model")   # reference answers come from the cache
     client = make_client()
     segmenter = CachedSegmenter(DinoV2Segmenter(), config.path("weights").stem)
-    emb = []
     root = args.cases.resolve().parent.parent
     rows = [r for r in csv.DictReader(open(args.cases, encoding="utf-8")) if not args.only or r["case_id"] in args.only]
     results = []
     for row in rows:
-        seg = segment_case(build_case(row, root, lambda: emb[0] if emb else (emb.append(DinoEmbedder()) or emb[0])),
+        seg = segment_case(build_case(row, root, quick_segmenter(segmenter)),
                            segmenter)
         ids = [f.view_id for f in seg.frames]
         masks = [seg.masks[i] for i in ids]

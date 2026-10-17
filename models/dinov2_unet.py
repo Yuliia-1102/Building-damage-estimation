@@ -25,3 +25,25 @@ class DinoV2Segmenter:
             self._seg = DamageSegmenter(self.weights, device=self.device)
         probs = self._seg.predict_probs(Image.fromarray(image), progress=progress)
         return probs.argmax(-1).astype(np.uint8)
+
+
+class QuickSegmenter:
+    """The same model in one pass over the frame shrunk to a single 518 px crop (~5 s on CPU instead of 10-60 s).
+    Too coarse for measuring damage; good enough to tell whether a video frame shows the building whole,
+    which is what view selection needs (core/video.py). Shares the loaded weights with `full`."""
+
+    def __init__(self, full: DinoV2Segmenter):
+        self.full = full
+
+    def predict(self, image: np.ndarray) -> np.ndarray:
+        import torch
+        from models.damage_seg import PATCH, DamageSegmenter
+        if self.full._seg is None:
+            self.full._seg = DamageSegmenter(self.full.weights, device=self.full.device)
+        seg = self.full._seg
+        small = Image.fromarray(image).convert("RGB").resize((PATCH, PATCH))
+        with torch.no_grad():
+            emb = seg.embedder(seg._embed_tf(small)[None].to(seg.device))
+            logits = seg.model(seg._crop_tf(small)[None].to(seg.device), emb, torch.zeros(1, 2, device=seg.device))
+        mask = logits[0].argmax(0).cpu().numpy().astype(np.uint8)
+        return np.asarray(Image.fromarray(mask).resize((image.shape[1], image.shape[0]), Image.NEAREST))

@@ -5,9 +5,9 @@
 
 | kind | count | what it is |
 |---|---|---|
-| generated_video | 11 | one Lyra-2 orbit per building from the paper's video corpus, only sequences that passed its quality check (rotation error ≤ 5.60°) |
+| generated_video | 8 | one Lyra-2 orbit per building from the paper's video corpus, only videos watched and approved by the team (2026-10-17): others had the camera going underground or invented walls |
 | photo | 1 | a single ground-level photo |
-| photos | 1 | four photos of one building |
+| photos | 1 | six photos of one building |
 
 Limitations, to be stated at the defence:
 - The generated videos are made from one real photo each; the other sides of the building are invented
@@ -19,5 +19,7 @@ Limitations, to be stated at the defence:
 `expected_damage` / `expected_condition` are a draft from a visual review of each source photo and
 must be confirmed by the team. Run everything with:
 
-    uv run python -m tools.run_testset testset/cases.csv --out output/testset.csv
-    uv run python -m tools.run_testset testset/cases.csv --repeat 3 --no-decision-cache --out output/consistency.csv
+    uv run python -m tools.run_testset testset/cases.csv                       # free: cached answers or stubs
+    uv run python -m tools.run_testset testset/cases.csv --gemini --name NAME  # paid requests
+
+Each run is saved in `output/runs/<date-time>_<name>/` (see tools/run_testset.py).

@@ -1,10 +1,17 @@
-"""From a video to a few views that differ as much as possible (epic 8).
+"""From a video to a few views of the building from different sides (epic 8).
 
-No assumptions about the flight path, speed, orbit completeness or building shape (plan.txt, section 4):
-  1. sample frames at a fixed interval            (task 8.1)
-  2. drop blurred frames by variance of Laplacian (task 8.2)
-  3. embed the rest and drop near-duplicates      (task 8.3)
-  4. greedy max-min: K frames least alike         (task 8.4)
+  1. sample frames at a fixed interval                                  (task 8.1)
+  2. drop blurred frames by variance of Laplacian                       (task 8.2)
+  3. split the video into K equal time spans: a flight around the building moves on, so the spans cover
+     its sides                                                          (task 8.4)
+  4. in each span, segment a few candidate frames quickly and keep the one that shows the building best:
+     most of the frame is building, and the building is not cut off on three or four sides (a wall at
+     arm's length, a tree or debris filling the view)                   (task 8.3)
+
+The first version picked the K frames least alike (greedy max-min on DINOv2 embeddings). On real orbits that
+picks exactly the bad frames above, because they are the most different ones. Similarity to the median frame
+did not work either: the damaged side is the rarest view of an orbit, so it looked "atypical" too.
+max_min_select is kept for comparison.
 """
 import logging
 import shutil
@@ -68,11 +75,45 @@ def drop_near_duplicates(embeddings: np.ndarray, threshold: float) -> list[int]:
     return kept
 
 
-def select_views(frames: list[Path], embedder, k: int | None = None) -> tuple[list[Path], dict]:
-    """The K most different sharp frames, in the order they appear in the video, plus a log of what was dropped."""
+def frame_quality(mask: np.ndarray) -> tuple[float, str]:
+    """How well a (quick) mask shows the building: the share of the frame that is building. When the building
+    touches three or four edges of the frame (seen from too close, or something in front of it), the score
+    drops below 0.1 and favours the wider shot among such frames: 0.1 x (1 - share)."""
+    building = mask > 0
+    share = float(building.mean())
+    if share == 0:
+        return 0.0, "no building"
+    rows, cols = np.flatnonzero(building.any(axis=1)), np.flatnonzero(building.any(axis=0))
+    h, w = mask.shape
+    edges = int(rows[0] == 0) + int(rows[-1] == h - 1) + int(cols[0] == 0) + int(cols[-1] == w - 1)
+    if edges >= 3:
+        return 0.1 * (1 - share), f"building cut off on {edges} sides"
+    return share, ""
+
+
+def span_candidates(sharp: list[int], k: int, n_frames: int, per_span: int, extra: int = 0) -> list[list[int]]:
+    """For each of k equal time spans: per_span sharp frames spread inside it (away from its edges, so views from
+    neighbouring spans do not end up next to each other), then up to `extra` spare frames nearest its middle."""
+    spans = []
+    for span in range(k):
+        lo, hi = span * n_frames / k, (span + 1) * n_frames / k
+        inside = [i for i in sharp if lo <= i < hi]
+        if not inside:
+            continue
+        targets = [lo + (hi - lo) * (j + 1) / (per_span + 1) for j in range(per_span)]
+        picks = list(dict.fromkeys(min(inside, key=lambda i: abs(i - t)) for t in targets))
+        spare = sorted((i for i in inside if i not in picks), key=lambda i: abs(i - (lo + hi) / 2))
+        spans.append(picks + spare[:extra])
+    return spans
+
+
+def select_views(frames: list[Path], embedder=None, k: int | None = None,
+                 quick_segmenter=None) -> tuple[list[Path], dict]:
+    """K views spread over the video, in the order they appear, plus a log of what was dropped and why.
+    Without quick_segmenter the middle candidate of each span is taken (no quality check)."""
     k = k or config.get("video", "views_k")
     blur_t = config.get("video", "blur_threshold")
-    dup_t = config.get("video", "duplicate_similarity")
+    per_span = config.get("video", "candidates_per_span")
 
     images = [np.asarray(Image.open(f).convert("RGB")) for f in frames]
     scores = [sharpness(im) for im in images]
@@ -81,14 +122,34 @@ def select_views(frames: list[Path], embedder, k: int | None = None) -> tuple[li
         sharp = sorted(range(len(frames)), key=lambda i: -scores[i])[:max(1, len(frames) // 2)]
         log.warning("no frame above the blur threshold %.0f; kept the sharpest half", blur_t)
 
-    emb = embedder.embed([images[i] for i in sharp])
-    unique = [sharp[i] for i in drop_near_duplicates(emb, dup_t)]
-    emb_unique = emb[[sharp.index(i) for i in unique]]
+    extra = config.get("video", "extra_candidates")
+    picked, rejected, checked = [], {}, 0
 
-    first = int(np.argmax([scores[i] for i in unique]))   # start from the sharpest frame
-    picked = sorted(unique[j] for j in max_min_select(emb_unique, k, first))
-    info = {"extracted": len(frames), "blurred": len(frames) - len(sharp),
-            "near_duplicates": len(sharp) - len(unique), "selected": len(picked),
+    def rate(i):
+        nonlocal checked
+        q, reason = frame_quality(quick_segmenter.predict_path(frames[i]))
+        checked += 1
+        if reason:
+            rejected[frames[i].name] = reason
+        return q, i
+
+    for candidates in span_candidates(sharp, k, len(frames), per_span, extra):
+        first = candidates[:per_span]
+        if quick_segmenter is None:
+            picked.append(first[len(first) // 2])
+            continue
+        rated = [rate(i) for i in first]
+        # every candidate shows the building cut off or not at all: look at a few more frames of this span
+        for i in candidates[per_span:]:
+            if max(rated)[0] >= 0.1:
+                break
+            rated.append(rate(i))
+        best_q, best = max(rated)
+        if best_q > 0:
+            picked.append(best)
+    picked.sort()
+    info = {"extracted": len(frames), "blurred": len(frames) - len(sharp), "checked": checked,
+            "rejected": rejected, "selected": len(picked),
             "sharpness": {frames[i].name: round(scores[i], 1) for i in range(len(frames))}}
     log.info("video views: %s", {k: v for k, v in info.items() if k != "sharpness"})
     return [frames[i] for i in picked], info

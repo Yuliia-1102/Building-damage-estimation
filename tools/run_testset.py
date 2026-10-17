@@ -51,13 +51,13 @@ PRICES_USD = {"gemini-3.8-flash": (0.75, 3.75), "gemini-3.1-flash-lite": (0.25, 
               "gemini-3.5-flash-lite": (0.30, 2.50)}
 
 
-def build_case(row: dict, root: Path, embedder_factory):
+def build_case(row: dict, root: Path, quick_segmenter=None):
     src = row["input"]
     paths = sorted(Path(p) for p in glob.glob(str(root / src)))
     if not paths:
         raise FileNotFoundError(src)
     if len(paths) == 1 and paths[0].suffix.lower() in VIDEO_EXTS:
-        case, _ = case_from_video(paths[0], config.path("cases") / "_video", embedder_factory())
+        case, _ = case_from_video(paths[0], config.path("cases") / "_video", quick_segmenter)
         case.case_id = row["case_id"]
         return case
     return case_from_paths(row["case_id"], paths)
@@ -194,14 +194,8 @@ def main() -> None:
         log.warning("no --gemini: cached Gemini answers only, stubs where nothing is cached")
     from models.gemini_decision import build_prompt
 
-    embedder = None
-
-    def get_embedder():
-        nonlocal embedder
-        if embedder is None:
-            from models.dino_embedder import DinoEmbedder
-            embedder = DinoEmbedder()
-        return embedder
+    from core.cache import quick_segmenter
+    quick = None if args.stub else quick_segmenter(segmenter)
 
     root = args.cases.resolve().parent.parent       # paths in cases.csv are relative to the repository
     rows = list(csv.DictReader(open(args.cases, encoding="utf-8")))
@@ -224,7 +218,7 @@ def main() -> None:
                 case_dir.mkdir(exist_ok=True)
                 try:
                     if row["case_id"] not in segs:
-                        segs[row["case_id"]] = segment_case(build_case(row, root, get_embedder), segmenter)
+                        segs[row["case_id"]] = segment_case(build_case(row, root, quick), segmenter)
                         if not args.no_views:
                             save_views(segs[row["case_id"]], case_dir / "views")
                     seg = segs[row["case_id"]]

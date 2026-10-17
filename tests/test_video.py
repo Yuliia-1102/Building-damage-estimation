@@ -21,3 +21,22 @@ def test_max_min_picks_the_distinct_directions():
 def test_near_duplicates_dropped():
     e = np.array([[1, 0], [0.999, 0.01], [0, 1]], float)
     assert drop_near_duplicates(e, threshold=0.97) == [0, 2]
+
+
+def test_candidates_cover_every_time_span():
+    from core.video import span_candidates
+    spans = span_candidates(list(range(40)), k=5, n_frames=40, per_span=2)
+    assert len(spans) == 5
+    assert all(len(c) == 2 for c in spans)
+    assert all(8 * s < c[0] < c[1] < 8 * (s + 1) for s, c in enumerate(spans))   # away from span edges
+
+
+def test_frame_quality_penalises_a_cut_off_building():
+    from core.video import frame_quality
+    whole = np.zeros((100, 100), np.uint8)
+    whole[20:80, 20:80] = 1
+    close_up = np.ones((100, 100), np.uint8)
+    close_up[:, :10] = 0
+    assert frame_quality(whole)[0] > frame_quality(close_up)[0]
+    assert "3 sides" in frame_quality(close_up)[1]
+    assert frame_quality(np.zeros((10, 10), np.uint8)) == (0.0, "no building")
