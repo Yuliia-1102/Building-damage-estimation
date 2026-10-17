@@ -64,7 +64,8 @@ def _jpeg(image: np.ndarray, max_side: int = 1024) -> bytes:
 
 class GeminiBuildingEstimator:
     def __init__(self, client=None, model: str | None = None, use_cache: bool = True):
-        self.llm = GeminiJSON(client=client, model=model, use_cache=use_cache)
+        self.llm = GeminiJSON(client=client, model=model or config.get("decision", "building_model"),
+                              use_cache=use_cache)
 
     def ask(self, image: np.ndarray) -> BuildingResponse:
         from google.genai import types
