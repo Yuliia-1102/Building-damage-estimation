@@ -1,5 +1,5 @@
 """Warm the Gemini cache for the demo scenes (docs/demo_scenario.md) exactly as the UI asks: same images,
-same prompts. Paid: about 5-8 requests the first time, none after (each line says whether it sent one).
+same prompts. Paid: about 5 requests the first time, none after (each line says whether it sent one).
 
     uv run python -m tools.demo_warmup
 """
@@ -19,7 +19,7 @@ from models.price_source import default_price_source
 
 DATASET = config.ROOT.parent / "Dataset_CVAT" / "images" / "default"
 PHOTO_SET = config.ROOT.parent / "videos" / "photo_sets" / "download12_2"
-VIDEO = config.ROOT.parent / "videos" / "corpus" / "download11_5_half.mp4"
+VIDEO = config.ROOT.parent / "videos" / "corpus" / "download12_2_full.mp4"
 
 
 def source(layer) -> str:
@@ -36,29 +36,26 @@ def main() -> None:
     logging.basicConfig(level=logging.WARNING)
     seg_model = CachedSegmenter(DinoV2Segmenter(), config.path("weights").stem)
     building, decision = GeminiBuildingEstimator(), GeminiDecisionLayer()
+    prices = default_price_source
 
-    # scene 1: one photo
+    # one photo
     seg = segment_case(case_from_paths("download10", [DATASET / "download10.png"]), seg_model)
-    r = evaluate(seg, building_estimator=building, decision_layer=decision, price_source=default_price_source())
-    print(line("scene 1", r), "| building", source(building), "| decision", source(decision))
+    r = evaluate(seg, building_estimator=building, decision_layer=decision, price_source=prices())
+    print(line("photo", r), "| building", source(building), "| decision", source(decision), flush=True)
 
-    # scene 2: photo set; scene 4: the same report with floors 5 -> 6
-    paths = sorted(Path(p) for p in glob.glob(str(PHOTO_SET / "*.jpg")))
-    seg = segment_case(case_from_paths("download12_2", paths), seg_model)
-    r = evaluate(seg, building_estimator=building, decision_layer=decision, price_source=default_price_source())
-    print(line("scene 2", r), "| building", source(building), "| decision", source(decision))
+    # video (the UI extracts the same frames, so its answers come from this cache)
+    case, _ = case_from_video(VIDEO, config.path("cases") / "_video", quick_segmenter(seg_model))
+    seg = segment_case(case, seg_model)
+    r = evaluate(seg, building_estimator=building, decision_layer=decision, price_source=prices())
+    print(line("video", r), "| building", source(building), "| decision", source(decision), flush=True)
+
+    # the same video report with one floor more (the edit shown in the demo)
     edited = copy.deepcopy(r.building)
     edited.floors = r.building.floors + 1
     masks = [seg.masks[f.view_id] for f in seg.frames]
     edited = recompute(edited, masks[edited.source_frame], {"floors"})
-    r = evaluate(seg, building=edited, decision_layer=decision, price_source=default_price_source())
-    print(line("scene 4", r), "| decision", source(decision))
-
-    # scene 3: video (the UI extracts the same frames, so its answers come from this cache)
-    case, _ = case_from_video(VIDEO, config.path("cases") / "_video", quick_segmenter(seg_model))
-    seg = segment_case(case, seg_model)
-    r = evaluate(seg, building_estimator=building, decision_layer=decision, price_source=default_price_source())
-    print(line("scene 3", r), "| building", source(building), "| decision", source(decision))
+    r = evaluate(seg, building=edited, decision_layer=decision, price_source=prices())
+    print(line("video, floors +1", r), "| decision", source(decision), flush=True)
 
 
 if __name__ == "__main__":
