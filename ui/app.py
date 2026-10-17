@@ -31,8 +31,7 @@ from core.imageio import LEGEND, overlay  # noqa: E402
 from core.pipeline import evaluate, segment_case  # noqa: E402
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA,  # noqa: E402
                             DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
-from core.summary import summary_points  # noqa: E402
-from core.report_pdf import COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf  # noqa: E402
+from core.report_pdf import STUB_UA, COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf  # noqa: E402
 
 st.set_page_config(page_title="Оцінка пошкоджень будівлі", page_icon="🏚️", layout="wide")
 
@@ -332,29 +331,32 @@ def damage_section(report):
     section(3, "Виміряні пошкодження")
     r, a = report.ratios, report.areas
     c = st.columns(4)
-    c[0].metric("Фасад пошкоджено", pct(r.damaged_facade), help="Частка видимого фасаду по всіх видах")
-    c[1].metric("Найгірша секція фасаду", pct(r.worst_section_damage),
-                help="Третина ширини фасаду з найбільшою часткою пошкоджень в одному виді: показує зруйновану "
-                     "секцію, яку середнє по фасаду розмиває (ДСТУ 9273, п. 5.3)")
+    c[0].metric("Фасад пошкоджено", pct(r.damaged_facade), help="В середньому по всіх видах")
+    c[1].metric("Найбільш зруйнована ділянка фасаду", pct(r.worst_section_damage),
+                help="Ділянка завширшки в третину фасаду з найбільшою часткою пошкоджень на одному виді. "
+                     "Показує локальне руйнування, яке середнє розмиває; категорію визначає найгірша частина "
+                     "будівлі (ДСТУ 9273, п. 5.3)")
     c[2].metric("Вікна пошкоджено", pct(r.broken_window))
     c[3].metric("Дах пошкоджено", pct(r.damaged_roof),
                 help="Дах видно лише смугою, оцінка приблизна" if r.roof_partly_seen else None)
     rows = [
-        {"Поверхня": "Пошкодження фасаду", "Частка": pct(r.damaged_facade), "Найгірший вид": pct(r.worst_facade_damage),
-         "Площа, м²": round(a.damaged_facade_m2) if a and a.damaged_facade_m2 else None},
-        {"Поверхня": "Пошкоджені вікна", "Частка": pct(r.broken_window), "Найгірший вид": "",
-         "Площа, м²": round(a.broken_window_m2) if a and a.broken_window_m2 else None},
-        {"Поверхня": "Пошкодження даху", "Частка": pct(r.damaged_roof), "Найгірший вид": pct(r.worst_roof_damage),
-         "Площа, м²": round(a.damaged_roof_m2) if a and a.damaged_roof_m2 else None},
+        {"Поверхня": "Фасад", "В середньому по всіх видах": pct(r.damaged_facade),
+         "З найгіршого боку": pct(r.worst_facade_damage),
+         "Площа пошкоджень, м²": round(a.damaged_facade_m2) if a and a.damaged_facade_m2 else None},
+        {"Поверхня": "Вікна", "В середньому по всіх видах": pct(r.broken_window), "З найгіршого боку": "",
+         "Площа пошкоджень, м²": round(a.broken_window_m2) if a and a.broken_window_m2 else None},
+        {"Поверхня": "Дах", "В середньому по всіх видах": pct(r.damaged_roof),
+         "З найгіршого боку": pct(r.worst_roof_damage),
+         "Площа пошкоджень, м²": round(a.damaged_roof_m2) if a and a.damaged_roof_m2 else None},
     ]
     st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
     notes = []
-    if a:
-        notes.append(f"Площа стін {num(a.wall_area_m2, ' м²')}, площа даху {num(a.roof_area_m2, ' м²')}.")
     if r.damage_by_third:
         low, mid, up = r.damage_by_third
-        notes.append(f"Пошкодження фасаду по висоті: нижня третина {low:.0%}, середня {mid:.0%}, верхня {up:.0%} "
-                     f"(пошкодження нижніх поверхів небезпечніші, ДСТУ 9273, п. 11.26).")
+        notes.append(f"По висоті: нижні поверхи {low:.0%}, середні {mid:.0%}, верхні {up:.0%} усіх пошкоджень "
+                     f"фасаду (руйнування нижніх поверхів небезпечніше, ДСТУ 9273, п. 11.26).")
+    if a:
+        notes.append(f"Площа стін {num(a.wall_area_m2, ' м²')}, даху {num(a.roof_area_m2, ' м²')}.")
     if notes:
         st.caption(" ".join(notes))
 
@@ -362,8 +364,8 @@ def damage_section(report):
 def conclusion_section(report):
     section(4, "Висновок")
     d = report.decision
-    if d is None:
-        st.info("Категорії не визначено.")
+    if d is None or d.is_stub:
+        st.error(STUB_UA, icon="⛔")
         return
     if d.escalation == "insufficient_data":
         st.error(ESCALATION_UA[d.escalation] + f" (впевненість {d.confidence:.2f})")
@@ -386,18 +388,15 @@ def conclusion_section(report):
         with c3:
             st.metric("Впевненість", f"{d.confidence:.2f}")
         (st.success if d.escalation == "confirmed" else st.warning)(ESCALATION_UA[d.escalation])
-    with st.container(border=True):
-        st.markdown("**Висновок словами**")
-        lines = []
-        for text in summary_points(report):
-            label, sep, rest = text.partition(": ")
-            lines.append(f"- **{label}:** {rest}" if sep else f"- {text}")
-        st.markdown("\n".join(lines))
+
 
 
 def cost_section(report):
     section(5, "Роботи і орієнтовна вартість")
     d, k = report.decision, report.cost
+    if d is None or d.is_stub:
+        st.info("Перелік робіт і вартість не визначено: вони залежать від рішення моделі.")
+        return
     c1, c2 = st.columns([2, 3])
     with c1.container(border=True):
         if k and k.total > 0:

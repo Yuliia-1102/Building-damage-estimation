@@ -70,4 +70,4 @@ class StubDecisionLayer:
                 groups.add(w.group)
         return Decision(damage_category="I", condition_category=2, confidence=0.6,
                         works=works_with_quantities(codes, areas), escalation=escalation_level(0.6),
-                        roof_covering_category=roof_covering_category(ratios.damaged_roof))
+                        roof_covering_category=roof_covering_category(ratios.damaged_roof), is_stub=True)

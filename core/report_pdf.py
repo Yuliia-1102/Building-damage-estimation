@@ -14,7 +14,6 @@ from core import config
 from core.imageio import LEGEND, overlay
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA, DISCLAIMER_UA,
                             ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
-from core.summary import summary_points
 from core.types import Report
 
 FONT_DIR = config.ROOT / "resources" / "fonts"
@@ -25,7 +24,8 @@ LEGEND_UA = {"background": "фон", "facade": "фасад", "roof": "дах", "
 
 
 ASSUMPTIONS_UA = {
-    "depth assumed equal to width (no corner view used)": "глибину прийнято рівною ширині",
+    "depth assumed equal to width (no corner view used)":
+        "глибину прийнято рівною ширині: зі знімків вимірюється лише ширина фасаду; виправте, якщо відома",
     "roof type unknown, flat roof assumed": "тип даху невідомий, прийнято плаский",
     "floors not readable and no reference object: dimensions unknown, enter them":
         "поверхи не читаються і немає еталонного об'єкта: розміри невідомі, введіть їх",
@@ -137,6 +137,18 @@ def _legend(pdf: FPDF):
     pdf.ln(2)
 
 
+STUB_UA = "Категорії не визначено: модель рішень не запускалась (Gemini вимкнено, збереженої відповіді для цих даних немає). Увімкніть Gemini і повторіть оцінку."
+
+SOURCES = [
+    ("Методика проведення обстеження та оформлення його результатів, наказ Мінрозвитку № 144 від 06.08.2022 — "
+     "категорії пошкоджень (Додаток 3)", "https://zakon.rada.gov.ua/laws/show/z0898-22"),
+    ("ДСТУ 9273:2024 «Настанова щодо обстеження будівель і споруд для визначення та оцінювання їхнього технічного "
+     "стану» — категорії технічного стану (розділ 5)",
+     "https://online.budstandart.com/ua/catalog/doc-page.html?id_doc=106902"),
+    ("ДБН В.1.2-14:2018 «Система забезпечення надійності та безпеки будівельних об'єктів» — класи наслідків",
+     "https://zakon.isu.net.ua/sites/default/files/normdocs/tekst_dbn_v.1.2-14_2018_sistema_zabezpechennya_nadiynosti_ta_.pdf"),
+]
+
 HEIGHT_SOURCE_UA = {"floors": "за кількістю поверхів", "user": "введено користувачем"}
 
 
@@ -214,32 +226,45 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     r = report.ratios
     a = report.areas
     _table(pdf, [
-        ["Поверхня", "Частка видимої поверхні", "Найгірший вид", "Площа"],
-        ["Пошкодження фасаду", _pct(r.damaged_facade), _pct(r.worst_facade_damage),
+        ["Поверхня", "Пошкоджено в середньому по всіх видах", "З найгіршого боку", "Площа пошкоджень"],
+        ["Фасад", _pct(r.damaged_facade), _pct(r.worst_facade_damage) + (f" (вид {r.worst_facade_view})"
+                                                                         if r.worst_facade_view else ""),
          _num(a.damaged_facade_m2 if a else None, " м²")],
-        ["Пошкоджені вікна", _pct(r.broken_window), "", _num(a.broken_window_m2 if a else None, " м²")],
-        ["Пошкодження даху", _pct(r.damaged_roof), _pct(r.worst_roof_damage),
+        ["Вікна", _pct(r.broken_window), "", _num(a.broken_window_m2 if a else None, " м²")],
+        ["Дах", _pct(r.damaged_roof), _pct(r.worst_roof_damage) + (f" (вид {r.worst_roof_view})"
+                                                                   if r.worst_roof_view else ""),
          _num(a.damaged_roof_m2 if a else None, " м²")],
-    ], widths=[50, 45, 40, 45])
+    ], widths=[30, 55, 50, 45])
     extra = []
     if r.worst_section_damage is not None:
-        extra.append(("Найгірша секція фасаду", f"{_pct(r.worst_section_damage)} (третина ширини фасаду, "
-                                                  f"вид {r.worst_section_view})"))
+        extra.append(("Найбільш зруйнована ділянка фасаду",
+                      f"{_pct(r.worst_section_damage)} її площі пошкоджено (ділянка завширшки в третину фасаду, "
+                      f"вид {r.worst_section_view}). Показує локальне руйнування, яке середнє по фасаду "
+                      f"розмиває; категорію визначає найгірша частина будівлі (ДСТУ 9273, п. 5.3)."))
     if r.damage_by_third:
         low, mid, up = r.damage_by_third
-        extra.append(("Пошкодження по висоті", f"нижня третина {low:.0%} · середня {mid:.0%} · верхня {up:.0%}"))
+        extra.append(("Як пошкодження розподілені по висоті",
+                      f"нижні поверхи {low:.0%}, середні {mid:.0%}, верхні {up:.0%} усіх пошкоджень фасаду. "
+                      f"Руйнування нижніх поверхів небезпечніше для всієї будівлі (ДСТУ 9273, п. 11.26)."))
     if a:
         extra.append(("Площа стін / даху", f"{_num(a.wall_area_m2, ' м²')} / {_num(a.roof_area_m2, ' м²')}"))
     if r.roof_partly_seen:
         extra.append(("Дах", "видно лише смугою, оцінка приблизна"))
+    if r.broken_window is not None and r.broken_window < 0.03 and (r.damaged_facade or 0) > 0.3:
+        extra.append(("Вікна", "у зруйнованих ділянках вікна не виділяються окремо і враховані в пошкодженнях "
+                               "фасаду"))
     if extra:
-        _kv(pdf, extra)
+        _kv(pdf, extra, widths=(55, 125))
 
     # 4. Conclusion
     _h(pdf, "4. Висновок")
     d = report.decision
-    if d is None:
-        _p(pdf, "Шар прийняття рішень не запускався.")
+    if d is None or d.is_stub:
+        pdf.set_font("dejavu", "B", 10)
+        pdf.set_text_color(180, 30, 30)
+        pdf.multi_cell(0, 5, STUB_UA, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0)
+        pdf.ln(2)
     elif d.escalation == "insufficient_data":
         _p(pdf, f"Категорію не визначено (впевненість {d.confidence:.2f}). {ESCALATION_UA[d.escalation]}")
     else:
@@ -258,13 +283,15 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         pdf.set_font("dejavu", "B", 10)
         pdf.multi_cell(0, 5, ESCALATION_UA[d.escalation], new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
-    _sub(pdf, "Висновок словами")
-    _bullets(pdf, summary_points(report))
+
 
     # 5. Works and cost
     _h(pdf, "5. Перелік робіт і орієнтовна вартість")
     k = report.cost
-    if d and d.works:
+    if d is None or d.is_stub:
+        _p(pdf, "Перелік робіт і вартість не визначено: вони залежать від рішення моделі.")
+        k = None
+    if d and not d.is_stub and d.works:
         rows = [["Робота", "Обсяг", "Вартість"]]
         for w in d.works:
             cost = sum(l.cost for l in k.lines if l.work_type == w.work_type) if k else None
@@ -285,9 +312,13 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         _bullets(pdf, notes)
 
     _h(pdf, "Джерела")
-    _bullets(pdf, ["ДСТУ 9273:2024 «Настанова щодо обстеження будівель і споруд для визначення та оцінювання їхнього "
-                   "технічного стану» — категорії технічного стану.",
-                   "Методика проведення обстеження та оформлення його результатів, наказ Мінрозвитку № 144 від "
-                   "06.08.2022 — категорії пошкоджень.",
-                   "ДБН В.1.2-14:2018 — класи наслідків."])
+    for title, url in SOURCES:
+        pdf.set_font("dejavu", "", 9)
+        pdf.multi_cell(0, 4.6, "• " + title, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(30, 80, 200)
+        pdf.set_font("dejavu", "", 7)
+        pdf.set_x(pdf.l_margin + 3)
+        pdf.cell(0, 4.6, url, link=url, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0)
+        pdf.ln(1)
     return bytes(pdf.output())

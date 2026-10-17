@@ -135,6 +135,7 @@ class Decision:
     # "confirmed" | "preliminary" | "insufficient_data"
     escalation: str = "confirmed"
     roof_covering_category: int | None = None   # computed in code from table В.7.1, not by the model
+    is_stub: bool = False       # a fixed placeholder (no model answer): never shown as a result
 
     @property
     def damage_name(self) -> str:
