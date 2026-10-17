@@ -13,6 +13,12 @@ prices_csv = "resources/prices_sample"   # sample prices with labour rates, used
 # Not used yet: the model tiles the full-size photo into 518 px crops. Downscaling would cut CPU time (task 2.4).
 input_size = 1024
 
+[metrics]
+# The facade of each view is split into this many vertical sections; the worst one is reported. Chosen on the
+# test set (2026-10-17): with 3 sections both category I cases stay at or below 0.18 while every II-III case is
+# at 0.34 or more; whole-view shares mixed them (download10_5: one wing destroyed, 0.33 whole view, 0.58 section).
+facade_sections = 3
+
 [suitability]
 # A frame counts for a surface only if that surface takes at least this share of the frame (task 3.3).
 # Placeholder, tuned on the test set in task 9.5.

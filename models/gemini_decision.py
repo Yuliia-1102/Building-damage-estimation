@@ -77,6 +77,9 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
     if ratios.worst_facade_damage is not None:
         lines.append(f"  worst single view of the facade: {_pct(ratios.worst_facade_damage)} damaged "
                      f"(facade damage + broken windows)")
+    if ratios.worst_section_damage is not None:
+        lines.append(f"  worst vertical section of the facade (a third of its width) in a single view: "
+                     f"{_pct(ratios.worst_section_damage)} damaged")
     if ratios.worst_roof_damage is not None:
         lines.append(f"  worst single view of the roof: {_pct(ratios.worst_roof_damage)} damaged")
     if ratios.damage_by_third is not None:
@@ -104,6 +107,9 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
         "Rules:",
         "- The building's category is set by its worst part, not by the average (ДСТУ 9273, 5.3): "
         "weigh the worst single view, not only the combined share.",
+        "- A worst vertical section far above the whole-view share means one section of the building is "
+        "destroyed while the rest is intact; a section destroyed through its height can make the whole building "
+        "category II-III and condition 4.",
         "- Damage concentrated in the lower floors is more dangerous for the whole building than the same "
         "damage in the upper floors (ДСТУ 9273, 11.26).",
         "- The same damage means more in a panel or brick building than in a monolithic frame "

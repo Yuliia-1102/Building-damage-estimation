@@ -52,6 +52,8 @@ class FrameMetrics:
     excluded_reasons: list[str] = field(default_factory=list)
     # damaged facade + broken window pixels in the lower / middle / upper third of the building's height
     damage_by_third: list[int] = field(default_factory=lambda: [0, 0, 0])
+    # damage share of the worst vertical section of the facade (one of N equal parts of its width)
+    worst_section: float | None = None
 
 
 @dataclass
@@ -71,6 +73,10 @@ class CombinedRatios:
     # Share of facade damage in the lower / middle / upper third of the building (ДСТУ 9273, 11.26:
     # damage to the lower floors is more dangerous). None when there is no facade damage.
     damage_by_third: list[float] | None = None
+    # The worst vertical section of the facade in any view: one destroyed section of a long building
+    # is diluted in the whole-view share (ДСТУ 9273, 5.3: the worst part decides).
+    worst_section_view: int | None = None
+    worst_section_damage: float | None = None
 
 
 # ---------- building parameters (epic 4) ----------

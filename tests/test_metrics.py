@@ -87,3 +87,13 @@ def test_worst_view_and_damage_by_third():
     c = combine([frame_metrics(1, m1, **kw), frame_metrics(2, m2, **kw)])
     assert c.worst_facade_view == 1 and c.worst_facade_damage == pytest.approx(1 / 3)
     assert c.damage_by_third == pytest.approx([300 / 390, 0, 90 / 390])
+
+
+def test_worst_section_finds_one_destroyed_wing():
+    from core.metrics import worst_section
+    mask = np.full((90, 90), Cls.FACADE, dtype=np.uint8)
+    mask[:, :30] = Cls.DAMAGED_FACADE          # left third destroyed, the rest intact
+    assert worst_section(mask, 3) == pytest.approx(1.0)
+    whole = (mask == Cls.DAMAGED_FACADE).mean()
+    assert whole == pytest.approx(1 / 3)
+    assert worst_section(np.zeros((10, 10), dtype=np.uint8), 3) is None

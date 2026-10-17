@@ -46,6 +46,9 @@ def print_text(r: Report) -> None:
           f"(over {c.facade_views} views), damaged roof {_pct(c.damaged_roof)} (over {c.roof_views} views)")
     if c.worst_facade_damage is not None:
         print(f"Worst facade view: view {c.worst_facade_view}, {_pct(c.worst_facade_damage)} damaged")
+    if c.worst_section_damage is not None:
+        print(f"Worst facade section (a third of the width): view {c.worst_section_view}, "
+              f"{_pct(c.worst_section_damage)} damaged")
     if c.damage_by_third:
         print("Facade damage by height: " + ", ".join(f"{n} {v:.0%}" for n, v in
                                                      zip(["lower", "middle", "upper"], c.damage_by_third)))

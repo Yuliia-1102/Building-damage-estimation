@@ -145,6 +145,9 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         ["Пошкодження даху", _pct(r.damaged_roof), _pct(r.worst_roof_damage),
          _num(a.damaged_roof_m2 if a else None, " м²")],
     ], widths=[50, 45, 40, 45])
+    if r.worst_section_damage is not None:
+        _p(pdf, f"Найгірша вертикальна секція фасаду (третина ширини, вид {r.worst_section_view}): "
+                f"{_pct(r.worst_section_damage)} пошкоджено.")
     if r.damage_by_third:
         low, mid, up = r.damage_by_third
         _p(pdf, f"Розподіл пошкоджень фасаду по висоті: нижня третина {low:.0%}, середня {mid:.0%}, "

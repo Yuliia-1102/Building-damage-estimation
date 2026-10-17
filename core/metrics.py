@@ -35,6 +35,24 @@ def damage_by_third(mask: np.ndarray) -> list[int]:
     return [lower, middle, upper]
 
 
+def worst_section(mask: np.ndarray, sections: int | None = None) -> float | None:
+    """Damage share (damaged facade + broken windows) of the worst of N equal vertical sections of the facade.
+
+    The sections split the horizontal extent of the facade; a section with almost no facade in it (under 2%
+    of the facade) is ignored, so a thin edge does not produce a 100% ratio from a few pixels."""
+    sections = sections or config.get("metrics", "facade_sections")
+    facade = np.isin(mask, [Cls.FACADE, Cls.DAMAGED_FACADE, Cls.BROKEN_WINDOW])
+    damaged = np.isin(mask, [Cls.DAMAGED_FACADE, Cls.BROKEN_WINDOW])
+    cols = np.flatnonzero(facade.sum(axis=0) > 0.05 * mask.shape[0])
+    if cols.size == 0:
+        return None
+    edges = np.linspace(cols[0], cols[-1] + 1, sections + 1).astype(int)
+    total = facade.sum()
+    shares = [damaged[:, a:b].sum() / facade[:, a:b].sum()
+              for a, b in zip(edges[:-1], edges[1:]) if facade[:, a:b].sum() > 0.02 * total]
+    return float(max(shares)) if shares else None
+
+
 def frame_metrics(view_id: int, mask: np.ndarray,
                   min_facade_share: float | None = None,
                   min_roof_share: float | None = None) -> FrameMetrics:
@@ -72,6 +90,7 @@ def frame_metrics(view_id: int, mask: np.ndarray,
         roof_usable=roof_usable,
         excluded_reasons=reasons,
         damage_by_third=damage_by_third(mask),
+        worst_section=worst_section(mask),
     )
 
 
@@ -93,6 +112,9 @@ def combine(frames: list[FrameMetrics]) -> CombinedRatios:
     worst_facade = max(facade, key=facade_damage, default=None)
     worst_roof = max(roof, key=lambda f: f.damaged_roof_ratio, default=None)
 
+    sectioned = [f for f in facade if f.worst_section is not None]
+    worst_sec = max(sectioned, key=lambda f: f.worst_section, default=None)
+
     thirds = [sum(f.damage_by_third[i] for f in facade) for i in range(3)]
     total = sum(thirds)
 
@@ -107,4 +129,6 @@ def combine(frames: list[FrameMetrics]) -> CombinedRatios:
         worst_roof_view=worst_roof.view_id if worst_roof else None,
         worst_roof_damage=worst_roof.damaged_roof_ratio if worst_roof else None,
         damage_by_third=[t / total for t in thirds] if total else None,
+        worst_section_view=worst_sec.view_id if worst_sec else None,
+        worst_section_damage=worst_sec.worst_section if worst_sec else None,
     )

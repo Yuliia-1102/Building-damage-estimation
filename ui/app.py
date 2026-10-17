@@ -204,6 +204,25 @@ def report_screen():
             st.write(f"Стан покрівлі за площею пошкоджень (ДСТУ 9273, табл. В.7.1): категорія "
                      f"{d.roof_covering_category}.")
 
+    r, a = report.ratios, report.areas
+    st.subheader("Виміряні пошкодження")
+    st.dataframe(pd.DataFrame([
+        {"Поверхня": "Пошкодження фасаду", "Частка видимої поверхні": pct(r.damaged_facade),
+         "Найгірший вид": pct(r.worst_facade_damage), "Найгірша секція фасаду": pct(r.worst_section_damage),
+         "Площа, м²": a.damaged_facade_m2 if a else None},
+        {"Поверхня": "Пошкоджені вікна", "Частка видимої поверхні": pct(r.broken_window),
+         "Найгірший вид": "", "Найгірша секція фасаду": "", "Площа, м²": a.broken_window_m2 if a else None},
+        {"Поверхня": "Пошкодження даху", "Частка видимої поверхні": pct(r.damaged_roof),
+         "Найгірший вид": pct(r.worst_roof_damage), "Найгірша секція фасаду": "",
+         "Площа, м²": a.damaged_roof_m2 if a else None},
+    ]), hide_index=True, width="stretch")
+    notes = ["Найгірша секція — третина ширини фасаду з найбільшою часткою пошкоджень в одному виді: "
+             "показує зруйновану секцію, яку середнє по фасаду розмиває."]
+    if r.damage_by_third:
+        low, mid, up = r.damage_by_third
+        notes.append(f"Пошкодження фасаду по висоті: нижня третина {low:.0%}, середня {mid:.0%}, верхня {up:.0%}.")
+    st.caption(" ".join(notes))
+
     k = report.cost
     st.subheader("Орієнтовна вартість відновлення")
     if k and k.total > 0:
@@ -296,6 +315,7 @@ def masks_screen():
         c2.dataframe(pd.DataFrame([
             {"Показник": "Пошкодження фасаду", "Значення": pct(f.damaged_facade_ratio)},
             {"Показник": "Пошкоджені вікна", "Значення": pct(f.broken_window_ratio)},
+            {"Показник": "Найгірша секція фасаду", "Значення": pct(f.worst_section)},
             {"Показник": "Пошкодження даху", "Значення": pct(f.damaged_roof_ratio)},
             {"Показник": "Фасад займає кадру", "Значення": pct(f.facade_share)},
             {"Показник": "Дах займає кадру", "Значення": pct(f.roof_share)},
