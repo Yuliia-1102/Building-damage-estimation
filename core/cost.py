@@ -1,48 +1,42 @@
-"""Cost calculation (task 6.5). Plain arithmetic, never the language model.
+"""Cost calculation (epic 6.5): quantities x database prices, as a range.
 
-cost of a work = damaged area x (sum over its materials of quantity per m2 x material price + labour per m2)
-The total is widened into a range by the same uncertainty as the areas (task 3.6).
+Done by code, never by the model. Uses only the PriceSource interface, so it
+contains no SQL and does not know whether prices come from the DB or a CSV.
 """
-import logging
+from __future__ import annotations
+
 from datetime import date
 
-from core import config, geometry
+from core import config
 from core.interfaces import PriceSource
-from core.types import CostEstimate, CostLine, WorkItem
-
-log = logging.getLogger(__name__)
+from core.types import CostEstimate, CostLine, Decision
 
 
-def estimate_cost(works: list[WorkItem], prices: PriceSource, views: int,
-                  as_of: date | None = None) -> CostEstimate:
-    as_of = as_of or date.today()
-    limit = config.get("prices", "max_candidates")
-    lines, skipped = [], []
+def estimate_cost(decision: Decision, price_source: PriceSource, views_assessed: int,
+                  as_of: date | None = None, max_candidates: int | None = None) -> CostEstimate:
+    if as_of is None:
+        as_of = date.today()
+    if max_candidates is None:
+        max_candidates = config.get("prices", "max_candidates")
 
-    for work in works:
-        if work.quantity is None:
-            skipped.append(f"{work.work_type}: damaged area unknown")
+    lines: list[CostLine] = []
+    total = 0.0
+    for work in decision.works:
+        if work.quantity is None:                 # area unknown -> cannot cost it
             continue
-        work_lines = []
-        for item in prices.get_items_by_work_type(work.work_type, limit):
-            price = prices.get_price_as_of(item["id"], as_of)
-            if price is None:
-                log.warning("no price for %s as of %s", item["name"], as_of)
-                continue
-            value, valid_from = price
-            qty = work.quantity * item["quantity_per_unit"]
-            work_lines.append(CostLine(work.work_type, item["name"], qty, item["unit"], value, qty * value,
-                                       valid_from))
-        labour = getattr(prices, "get_labour_price_as_of", lambda *_: None)(work.work_type, as_of)
-        if labour is not None:
-            value, valid_from = labour
-            work_lines.append(CostLine(work.work_type, "labour", work.quantity, work.unit, value,
-                                       work.quantity * value, valid_from))
-        if not work_lines:
-            skipped.append(f"{work.work_type}: no prices in the catalogue")
-        lines += work_lines
+        for item in price_source.get_items_by_work_type(work.work_type, max_candidates):
+            try:
+                unit_price = price_source.get_price_as_of(item["id"], as_of)
+            except LookupError:
+                continue                          # no price yet -> skip this material
+            material_qty = work.quantity * item["quantity_per_unit"]
+            cost = material_qty * unit_price
+            total += cost
+            lines.append(CostLine(work=work, item_name=item["name"],
+                                  unit_price=unit_price, cost=cost))
 
-    total = sum(line.cost for line in lines)
-    low, high = geometry.value_range(total, views)
-    return CostEstimate(lines=lines, total=total, low=low, high=high, as_of=as_of.isoformat(),
-                        skipped_works=skipped, price_source=getattr(prices, "label", ""))
+    # Range widens with fewer assessed views (task 3.6 coefficients).
+    half = (config.get("uncertainty", "scale_error")
+            + config.get("uncertainty", "coverage_coef") / max(views_assessed, 1))
+    return CostEstimate(lines=lines, total=total,
+                        low=total * (1 - half), high=total * (1 + half))

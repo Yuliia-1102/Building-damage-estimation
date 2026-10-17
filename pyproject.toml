@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2",
     "python-dotenv>=1.2.4",
     "streamlit>=1.66.0",
+    "sqlalchemy>=2.0",
 ]
 
 [project.optional-dependencies]
