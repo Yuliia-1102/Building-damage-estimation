@@ -60,12 +60,15 @@ source = "db"           # "db": materials database (epic 5); "csv": resources/pr
 max_candidates = 10     # task 5.5
 
 [decision]
-# Gemini models, chosen on 2026-10-17 with tools/model_bench.py on 9 test cases (output/bench.json).
-# Building parameters read a photo: gemini-3.8-flash counted floors best (Flash-Lite models missed 9->6, 22->16).
-# The decision is text only: gemini-3.1-flash-lite gave the same categories as 3.8 Flash on every case, about
-# 5x faster (the UI asks it again on every parameter edit) and about 10x cheaper.
+# Gemini models. Building parameters read a photo: gemini-3.8-flash counted floors best (Flash-Lite models missed
+# 9->6, 22->16; tools/model_bench.py, output/bench.json).
+# Decision: first gemini-3.1-flash-lite, while it was text only (same categories as 3.8 Flash, 5x cheaper).
+# With images in the decision (2026-10-17, output/runs/*step-a3-lite vs *step-a3-flash) 3.8 Flash was better:
+# damage category 9/10 vs 8/10, condition 3 vs 4 told apart, and it follows the rules on works (Lite closed the
+# windows with OSB on five category II buildings and left out facade repair on one). About $0.01 and 10-20 s per
+# decision instead of $0.001 and 2 s.
 # Fixed names, not "gemini-flash-latest", so repeated runs use the same model (consistency check).
-model = "gemini-3.1-flash-lite"
+model = "gemini-3.8-flash"
 building_model = "gemini-3.8-flash"
 # Views shown to the decision model with the segmentation drawn over them (worst section, worst facade view,
 # worst roof view first). About 1,100 input tokens each; 0 = numbers only.
