@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from . import seed_data
 from .models import DamageClass, Material, Price, WorkMaterial, WorkType
+from .prices import set_labour_rate, set_price
 
 
 def _get_or_create_material(session: Session, name: str, unit: str) -> Material:
@@ -46,3 +47,9 @@ def load_seed(session: Session) -> None:
                                         quantity_per_unit=qty))
 
     session.commit()
+
+    # set_price / set_labour_rate add a row only if that date has no such value yet, so this is repeatable
+    for name, (value, source, url) in seed_data.PRICE_REVISIONS.items():
+        set_price(session, materials[name].id, value, seed_data.REVISION_DATE, source, url)
+    for code, (value, source, url) in seed_data.LABOUR.items():
+        set_labour_rate(session, code, value, seed_data.LABOUR_DATE, source, url)

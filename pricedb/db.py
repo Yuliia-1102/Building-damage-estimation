@@ -54,11 +54,9 @@ def session_factory(engine: Engine) -> sessionmaker[Session]:
 
 
 def open_db(path: str | Path) -> sessionmaker[Session]:
-    """Sessions for the database at `path`; creates and seeds it if it does not exist yet."""
+    """Sessions for the database at `path`. Creates missing tables and adds missing seed rows, so a database
+    made by an older version gets the new tables and data; rows edited by the admin are never overwritten."""
     from .seed import load_seed
-    path = Path(path)
-    if path.exists():
-        return session_factory(get_engine(sqlite_url(path)))
     engine = create_db(sqlite_url(path))
     with session_factory(engine)() as session:
         load_seed(session)

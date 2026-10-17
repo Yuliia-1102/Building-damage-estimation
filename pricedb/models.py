@@ -1,7 +1,8 @@
 """Materials database schema (epic 5).
 
     damage_class 1 ── N work_type N ── M material 1 ── N price
-                               (work_material)
+                         │     (work_material)
+                         └── 1 ── N labour_rate
 
 work_type.code matches core.reference.WORK_TYPES codes, so the decision layer and
 the price source speak the same language.
@@ -49,6 +50,9 @@ class WorkType(Base):
     damage_class: Mapped[DamageClass] = relationship(back_populates="work_types")
     materials: Mapped[list[WorkMaterial]] = relationship(
         back_populates="work_type", cascade="all, delete-orphan"
+    )
+    labour_rates: Mapped[list[LabourRate]] = relationship(
+        back_populates="work_type", order_by="LabourRate.valid_from"
     )
 
     __table_args__ = (Index("idx_work_type_damage_class", "damage_class_id"),)
@@ -118,3 +122,27 @@ class Price(Base):
 
     def __repr__(self) -> str:
         return f"Price({self.value} {self.currency} {self.valid_from})"
+
+
+class LabourRate(Base):
+    """One dated labour rate for a work type, per 1 unit (m2) of work. Rows are only ever inserted."""
+    __tablename__ = "labour_rate"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    work_type_id: Mapped[int] = mapped_column(ForeignKey("work_type.id", ondelete="RESTRICT"))
+    value: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(3), default="UAH")
+    valid_from: Mapped[date] = mapped_column(Date)
+    source: Mapped[str] = mapped_column(String(200))
+    source_url: Mapped[str | None] = mapped_column(String(500))
+
+    work_type: Mapped[WorkType] = relationship(back_populates="labour_rates")
+
+    __table_args__ = (
+        UniqueConstraint("work_type_id", "valid_from", name="uq_labour_per_date"),
+        CheckConstraint("value >= 0", name="ck_labour_non_negative"),
+        Index("idx_labour_lookup", "work_type_id", "valid_from"),
+    )
+
+    def __repr__(self) -> str:
+        return f"LabourRate({self.value} {self.currency} {self.valid_from})"

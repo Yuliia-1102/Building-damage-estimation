@@ -59,3 +59,31 @@ def update_price(session: Session, material_id: int, value: float,
     if value < 0:
         raise ValueError("price must be >= 0")
     return set_price(session, material_id, value, valid_from, source, source_url, currency)
+
+
+@dataclass(frozen=True)
+class LabourRow:
+    code: str
+    name: str
+    price: float | None
+    valid_from: date | None
+    source: str | None
+
+
+def list_labour_rates(session: Session, as_of: date | None = None) -> list[LabourRow]:
+    from .models import WorkType
+    from .prices import get_labour_rate_as_of
+    rows = []
+    for w in session.scalars(select(WorkType).order_by(WorkType.code)):
+        r = get_labour_rate_as_of(session, w.code, as_of)
+        rows.append(LabourRow(w.code, w.name, r.value if r else None, r.valid_from if r else None,
+                              r.source if r else None))
+    return rows
+
+
+def update_labour_rate(session: Session, work_code: str, value: float, valid_from: date | None = None,
+                       source: str = "manual"):
+    if value < 0:
+        raise ValueError("price must be >= 0")
+    from .prices import set_labour_rate
+    return set_labour_rate(session, work_code, value, valid_from, source)

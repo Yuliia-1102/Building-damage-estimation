@@ -3,7 +3,7 @@
 MaterialsDbPriceSource implements core.interfaces.PriceSource exactly:
     get_items_by_work_type(work_type: str, limit: int) -> list[dict]
     get_price_as_of(item_id: int, as_of: date) -> (value, valid_from ISO date) or None
-    get_labour_price_as_of(work_type: str, as_of: date) -> None (no labour rates in the DB yet)
+    get_labour_price_as_of(work_type: str, as_of: date) -> (UAH per m2 of work, valid_from) or None
 
 CsvPriceSource is the same contract backed by CSV files, for tests without a DB.
 Returned dicts carry id, name, unit and quantity_per_unit (material per 1 m2 of work).
@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import Material, WorkMaterial, WorkType
+from .prices import get_labour_rate_as_of
 from .prices import get_price_as_of as _db_price_as_of
 
 
@@ -56,7 +57,10 @@ class MaterialsDbPriceSource:
         return price.value, price.valid_from.isoformat()
 
     def get_labour_price_as_of(self, work_type: str, as_of: date) -> tuple[float, str] | None:
-        return None
+        rate = get_labour_rate_as_of(self._session, work_type, as_of)
+        if rate is None:
+            return None
+        return rate.value, rate.valid_from.isoformat()
 
 
 class CsvPriceSource:

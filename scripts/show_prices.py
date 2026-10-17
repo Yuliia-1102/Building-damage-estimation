@@ -42,6 +42,11 @@ def show(src, code: str) -> None:
         cost_per_m2 += line
         print(f"  {it['name']:24} {it['quantity_per_unit']:>8} {it['unit']:5} "
               f"{price:>9.2f} {line:>10.2f}")
+    print(f"  {'':24} {'':8} {'':5} {'materials':>9} {cost_per_m2:>10.2f} UAH")
+    labour = src.get_labour_price_as_of(code, AS_OF)
+    if labour is not None:
+        print(f"  {'':24} {'':8} {'':5} {'labour':>9} {labour[0]:>10.2f} UAH")
+        cost_per_m2 += labour[0]
     print(f"  {'':24} {'':8} {'':5} {'TOTAL/m2':>9} {cost_per_m2:>10.2f} UAH")
 
 
