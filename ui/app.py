@@ -5,6 +5,10 @@ Run:  uv run streamlit run ui/app.py
 Streamlit re-runs this whole script on every click, so (task 7.5): models are loaded once with
 st.cache_resource, segmentation results live in st.session_state, and editing a building parameter
 only re-runs evaluate(), never the model.
+
+The report reads top to bottom in the order an inspector checks it: the views with the masks (is the
+segmentation right?), the building parameters (are the dimensions right?), the measured damage, the
+conclusion by the standards, the works and the cost, the PDF.
 """
 import copy
 import hashlib
@@ -27,17 +31,41 @@ from core.imageio import LEGEND, overlay  # noqa: E402
 from core.pipeline import evaluate, segment_case  # noqa: E402
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA,  # noqa: E402
                             DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
-from core.report_pdf import LEGEND_UA, build_pdf  # noqa: E402
+from core.report_pdf import COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf  # noqa: E402
 
 st.set_page_config(page_title="Оцінка пошкоджень будівлі", page_icon="🏚️", layout="wide")
 
 PHOTO_TYPES = ["jpg", "jpeg", "png", "webp"]
 VIDEO_TYPES = ["mp4", "mov", "avi", "mkv", "webm"]
 MODES = {
-    "Одне фото": "Найгрубіша оцінка: видно лише один бік будівлі, тому діапазон вартості найширший.",
-    "Набір фото": "Кілька боків будівлі: точніше, ніж одне фото. Кожне фото вважається окремим видом.",
-    "Відео": "Система сама вибирає кілька найрізніших різких кадрів з обльоту. Обробка довша.",
+    "Одне фото": ("📷", "Найшвидше, але видно лише один бік будівлі: діапазон вартості найширший."),
+    "Набір фото": ("🗂️", "Кілька боків будівлі. Кожне фото — окремий вид, категорію визначає найгірша частина."),
+    "Відео": ("🎥", "Обліт дроном. Система сама вибирає по одному найкращому кадру з кожного відрізка обльоту."),
 }
+DAMAGE_COLORS = {"I": "green", "II": "orange", "III": "red"}
+CONDITION_COLORS = {1: "green", 2: "blue", 3: "orange", 4: "red"}
+
+CSS = """
+<style>
+.block-container {padding-top: 2rem; max-width: 1280px;}
+h1, h2, h3 {letter-spacing: -0.01em;}
+.hero {padding: 1.4rem 1.6rem; border-radius: 0.9rem; margin-bottom: 1.2rem;
+       background: linear-gradient(120deg, #1F2933 0%, #3E4C59 100%); color: #F7F5F2;}
+.hero h1 {color: #F7F5F2; font-size: 1.9rem; margin: 0 0 .3rem 0; padding: 0;}
+.hero p {color: #CBD2D9; margin: 0; font-size: .95rem;}
+.section-title {display: flex; align-items: center; gap: .6rem; margin: 1.6rem 0 .6rem 0;}
+.section-title .num {background: #C2410C; color: white; border-radius: 50%; width: 1.9rem; height: 1.9rem;
+                     display: inline-flex; align-items: center; justify-content: center; font-weight: 700;}
+.section-title .txt {font-size: 1.35rem; font-weight: 700;}
+.legend span {display: inline-block; padding: .15rem .6rem; border-radius: 1rem; margin: 0 .35rem .35rem 0;
+              font-size: .85rem; font-weight: 600;}
+.big-cost {font-size: 2.1rem; font-weight: 800; color: #1F2933; line-height: 1.1;}
+.muted {color: #616E7C; font-size: .88rem;}
+.kv {display: flex; justify-content: space-between; border-bottom: 1px dashed #E4E0DA; padding: .3rem 0;}
+.kv b {font-weight: 600;}
+div[data-testid="stMetricValue"] {font-size: 1.5rem;}
+</style>
+"""
 
 
 # ---------- resources loaded once per server (task 7.5.1) ----------
@@ -85,7 +113,7 @@ def get_prices():
     return default_price_source()
 
 
-# ---------- helpers ----------
+# ---------- actions ----------
 
 def save_uploads(files) -> Path:
     digest = hashlib.sha256(b"".join(f.getvalue() for f in files)).hexdigest()[:16]
@@ -100,24 +128,23 @@ def run_assessment(mode: str, files) -> None:
     folder = save_uploads(files)
     segmenter, _ = get_segmenter()
     building_estimator, decision_layer, _ = get_language_layers()
-    bar = st.progress(0.0, text="Підготовка…")
+    with st.status("Оцінюємо будівлю…", expanded=True) as status:
+        video_info = None
+        if mode == "Відео":
+            st.write("🎞️ Нарізаємо відео і відбираємо найкращі кадри з кожного відрізка обльоту…")
+            case, video_info = case_from_video(folder / Path(files[0].name).name, folder, get_quick_segmenter())
+        else:
+            case = case_from_paths(folder.name, [folder / Path(f.name).name for f in files])
+        bar = st.progress(0.0)
 
-    video_info = None
-    if mode == "Відео":
-        bar.progress(0.05, text="Нарізка відео і відбір найрізніших кадрів…")
-        case, video_info = case_from_video(folder / Path(files[0].name).name, folder, get_quick_segmenter())
-    else:
-        case = case_from_paths(folder.name, [folder / Path(f.name).name for f in files])
+        def progress(done, total, text):
+            bar.progress(done / max(total, 1), text=f"🧩 Сегментація: вид {min(done + 1, total)} з {total}")
 
-    def progress(done, total, text):
-        bar.progress(0.1 + 0.75 * done / max(total, 1), text=text.replace("segmenting view", "Сегментація виду")
-                     .replace("of", "з").replace("segmentation done", "Сегментацію завершено"))
-
-    seg = segment_case(case, segmenter, progress)
-    bar.progress(0.9, text="Параметри будівлі, класифікація і вартість…")
-    report = evaluate(seg, building_estimator=building_estimator, decision_layer=decision_layer,
-                      price_source=get_prices())
-    bar.progress(1.0, text="Готово")
+        seg = segment_case(case, segmenter, progress)
+        st.write("🏢 Параметри будівлі, категорії за нормативами, роботи і вартість…")
+        report = evaluate(seg, building_estimator=building_estimator, decision_layer=decision_layer,
+                          price_source=get_prices())
+        status.update(label="Готово", state="complete", expanded=False)
     st.session_state.update(seg=seg, report=report, video_info=video_info, pdf=None, recalc_time=None)
 
 
@@ -137,129 +164,142 @@ def recalculate(changes: dict) -> None:
     st.session_state.update(report=report, pdf=None, recalc_time=time.perf_counter() - t)
 
 
+# ---------- formatting ----------
+
 def pct(x):
-    return "не видно" if x is None else f"{x:.1%}"
+    return "не видно" if x is None else f"{x:.0%}"
 
 
 def num(x, unit=""):
-    return "—" if x is None else f"{x:,.1f}{unit}".replace(",", " ")
+    return "—" if x is None else f"{x:,.1f}{unit}".replace(",", " ").replace(".0" + unit, unit)
 
 
 def uah(x):
     return f"{x:,.0f} грн".replace(",", " ")
 
 
+def section(n: int, title: str) -> None:
+    st.markdown(f"<div class='section-title'><span class='num'>{n}</span><span class='txt'>{title}</span></div>",
+                unsafe_allow_html=True)
+
+
+def legend_html() -> str:
+    chips = []
+    for name, c in LEGEND.items():
+        if name == "background":
+            continue
+        fg = "#fff" if sum(c) < 450 else "#1F2933"
+        chips.append(f"<span style='background:rgb{tuple(c)};color:{fg}'>{LEGEND_UA[name]}</span>")
+    return "<div class='legend'>" + "".join(chips) + "</div>"
+
+
+def kv(label: str, value: str) -> str:
+    return f"<div class='kv'><span>{label}</span><b>{value}</b></div>"
+
+
 # ---------- screens ----------
 
+def hero():
+    st.markdown("<div class='hero'><h1>🏚️ Оцінка пошкоджень будівлі</h1>"
+                "<p>Фото або відео пошкодженої будівлі → маски пошкоджень, параметри будівлі, категорії за "
+                "Методикою № 144 і ДСТУ 9273:2024, перелік робіт і орієнтовна вартість відновлення.</p></div>",
+                unsafe_allow_html=True)
+
+
 def upload_screen():
-    st.header("Оцінка пошкоджень будівлі")
+    with st.container(border=True):
+        c1, c2 = st.columns([2, 3], vertical_alignment="center")
+        mode = c1.segmented_control("Що завантажуєте?", list(MODES), default="Набір фото",
+                                    format_func=lambda m: f"{MODES[m][0]} {m}") or "Набір фото"
+        c2.caption(MODES[mode][1])
+        max_mb = config.get("ui", "max_upload_mb")
+        files = st.file_uploader(
+            "Файли", type=VIDEO_TYPES if mode == "Відео" else PHOTO_TYPES, label_visibility="collapsed",
+            accept_multiple_files=(mode == "Набір фото"), help=f"До {max_mb} МБ на файл")
+        files = [files] if files and not isinstance(files, list) else (files or [])
+        too_big = [f.name for f in files if f.size > max_mb * 1024 * 1024]
+        if too_big:
+            st.error("Завеликі файли: " + ", ".join(too_big))
+        if mode == "Набір фото" and len(files) == 1:
+            st.warning("Для одного фото оберіть режим «Одне фото».")
+        if st.button("Оцінити будівлю", type="primary", icon="🔎", disabled=not files or bool(too_big),
+                     width="stretch"):
+            run_assessment(mode, files)
+            st.rerun()
     st.caption(DISCLAIMER_UA)
-    mode = st.radio("Що завантажуєте?", list(MODES), horizontal=True)
-    st.info(MODES[mode])
-    max_mb = config.get("ui", "max_upload_mb")
-    files = st.file_uploader(
-        "Файли", type=VIDEO_TYPES if mode == "Відео" else PHOTO_TYPES,
-        accept_multiple_files=(mode == "Набір фото"), help=f"До {max_mb} МБ на файл")
-    files = [files] if files and not isinstance(files, list) else (files or [])
-    too_big = [f.name for f in files if f.size > max_mb * 1024 * 1024]
-    if too_big:
-        st.error("Завеликі файли: " + ", ".join(too_big))
-    if mode == "Набір фото" and len(files) == 1:
-        st.warning("Для одного фото оберіть режим «Одне фото».")
-    if st.button("Оцінити", type="primary", disabled=not files or bool(too_big)):
-        run_assessment(mode, files)
 
 
-def report_screen():
-    report = st.session_state.report
-    seg = st.session_state.seg
+def source_notice(report):
     building_layer, decision_layer, online = get_language_layers()
     _, real_seg = get_segmenter()
     if not online:
         sources = {getattr(building_layer, "last_source", None), getattr(decision_layer, "last_source", None)}
         if "stub" in sources:
-            st.warning("Gemini вимкнено, а для цього випадку немає збережених відповідей: параметри будівлі "
-                       "і класифікація — фіксовані заглушки. Увімкніть Gemini в бічній панелі для реальної оцінки.")
-        else:
-            st.info("Gemini вимкнено: показано збережені раніше відповіді Gemini для цього випадку (без запитів).")
+            st.warning("Gemini вимкнено, а для цього випадку немає збережених відповідей: параметри будівлі і "
+                       "категорії — фіксовані заглушки. Увімкніть Gemini в бічній панелі для реальної оцінки.",
+                       icon="⚠️")
     if not real_seg:
-        st.warning("Ваги моделі сегментації не знайдено: маски — заглушки.")
+        st.warning("Ваги моделі сегментації не знайдено: маски — заглушки.", icon="⚠️")
     for e in report.errors:
         st.error(f"Крок не виконано: {e}")
 
-    d = report.decision
-    st.subheader("Висновок")
-    if d is None:
-        st.write("Класифікацію не виконано.")
-    elif d.escalation == "insufficient_data":
-        st.error(ESCALATION_UA[d.escalation] + f" (впевненість {d.confidence:.2f})")
-    else:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Категорія пошкоджень", f"{d.damage_category} — {DAMAGE_NAMES_UA[d.damage_category]}",
-                  help="Методика № 144, Додаток 3. Основний результат для черговості обстежень.")
-        c2.metric("Технічний стан", f"{d.condition_category} — {CONDITION_NAMES_UA[d.condition_category]}",
-                  help="ДСТУ 9273:2024, розділ 5")
-        c3.metric("Впевненість", f"{d.confidence:.2f}")
-        (st.success if d.escalation == "confirmed" else st.warning)(ESCALATION_UA[d.escalation])
-        st.write(f"Рекомендація: {DAMAGE_RECOMMENDATION_UA[d.damage_category]}.")
-        if d.roof_covering_category:
-            st.write(f"Стан покрівлі за площею пошкоджень (ДСТУ 9273, табл. В.7.1): категорія "
-                     f"{d.roof_covering_category}.")
 
-    r, a = report.ratios, report.areas
-    st.subheader("Виміряні пошкодження")
-    st.dataframe(pd.DataFrame([
-        {"Поверхня": "Пошкодження фасаду", "Частка видимої поверхні": pct(r.damaged_facade),
-         "Найгірший вид": pct(r.worst_facade_damage), "Найгірша секція фасаду": pct(r.worst_section_damage),
-         "Площа, м²": a.damaged_facade_m2 if a else None},
-        {"Поверхня": "Пошкоджені вікна", "Частка видимої поверхні": pct(r.broken_window),
-         "Найгірший вид": "", "Найгірша секція фасаду": "", "Площа, м²": a.broken_window_m2 if a else None},
-        {"Поверхня": "Пошкодження даху", "Частка видимої поверхні": pct(r.damaged_roof),
-         "Найгірший вид": pct(r.worst_roof_damage), "Найгірша секція фасаду": "",
-         "Площа, м²": a.damaged_roof_m2 if a else None},
-    ]), hide_index=True, width="stretch")
-    notes = ["Найгірша секція — третина ширини фасаду з найбільшою часткою пошкоджень в одному виді: "
-             "показує зруйновану секцію, яку середнє по фасаду розмиває."]
-    if r.damage_by_third:
-        low, mid, up = r.damage_by_third
-        notes.append(f"Пошкодження фасаду по висоті: нижня третина {low:.0%}, середня {mid:.0%}, верхня {up:.0%}.")
-    st.caption(" ".join(notes))
+def views_section(report, seg):
+    section(1, "Будівля і маски пошкоджень")
+    info = st.session_state.get("video_info")
+    if info:
+        st.caption(f"🎥 З відео нарізано {info['extracted']} кадрів (1 за секунду). Обліт поділено на рівні відрізки, "
+                   f"у кожному перевірено кандидатів (усього {info['checked']}) і взято кадр, де будівлю видно "
+                   f"найкраще: обрано {info['selected']} видів з різних сторін.")
+    c1, c2 = st.columns([3, 1], vertical_alignment="center")
+    c1.markdown(legend_html(), unsafe_allow_html=True)
+    show_mask = c2.toggle("Показувати маску", value=True)
+    for vid, err in report.skipped_frames.items():
+        st.error(f"Вид {vid} пропущено: {err}")
+    frames = report.frames
+    worst = {report.ratios.worst_section_view, report.ratios.worst_facade_view}
+    for row in range(0, len(frames), 2):
+        cols = st.columns(2)
+        for col, f in zip(cols, frames[row:row + 2]):
+            with col.container(border=True):
+                img = seg.images[f.view_id]
+                st.image(overlay(img, seg.masks[f.view_id]) if show_mask else img, width="stretch")
+                tag = " · найгірший вид" if f.view_id in worst else ""
+                damaged = None if f.damaged_facade_ratio is None else f.damaged_facade_ratio + f.broken_window_ratio
+                st.markdown(f"**Вид {f.view_id}**{tag}  \n"
+                            f"<span class='muted'>фасад пошкоджено {pct(damaged)} · найгірша секція "
+                            f"{pct(f.worst_section)} · дах {pct(f.damaged_roof_ratio)}</span>",
+                            unsafe_allow_html=True)
+                if not f.facade_usable or f.excluded_reasons:
+                    st.caption("Не враховано: " + "; ".join(
+                        r.replace("facade", "фасад").replace("roof", "дах").replace("of frame", "кадру")
+                        for r in f.excluded_reasons))
 
-    k = report.cost
-    st.subheader("Орієнтовна вартість відновлення")
-    if k and k.total > 0:
-        st.markdown(f"### від {uah(k.low)} до {uah(k.high)}")
-        st.caption(f"Оцінено різних видів: {report.views_assessed}. Ціни станом на {k.as_of}"
-                   + (f"; джерело: {k.price_source}" if k.price_source else "")
-                   + ". Чим менше видів, тим ширший діапазон.")
-    else:
-        st.write("Вартість не розраховано: невідомі розміри будівлі або немає цін.")
-    if d and d.works:
-        rows = []
-        for w in d.works:
-            cost = sum(l.cost for l in k.lines if l.work_type == w.work_type) if k else None
-            rows.append({"Робота": WORK_NAMES_UA.get(w.work_type, w.work_type), "Обсяг, м²": w.quantity,
-                         "Вартість, грн": cost})
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-        if k and k.lines:
-            with st.expander("Розрахунок по позиціях"):
-                st.dataframe(pd.DataFrame([{
-                    "Робота": WORK_NAMES_UA.get(l.work_type, l.work_type), "Позиція": l.item_name,
-                    "Кількість": round(l.quantity, 2), "Од.": l.unit, "Ціна": l.unit_price,
-                    "Сума": round(l.cost), "Ціна від": l.price_date} for l in k.lines]),
-                    hide_index=True, width="stretch")
-        if k and k.skipped_works:
-            st.caption("Не враховано: " + "; ".join(k.skipped_works))
 
-    st.subheader("Параметри будівлі")
+def building_section(report):
+    section(2, "Параметри будівлі")
     b = report.building
     if b is None:
-        st.write("Параметри не визначено.")
-    else:
-        st.caption("Позначка «авто» означає, що значення визначено автоматично. Помилка на один поверх "
-                   "лінійно змінює всю вартість — перевірте і виправте за потреби.")
+        st.info("Параметри не визначено.")
+        return
+    c = st.columns(4)
+    c[0].metric("Поверхів", b.floors or "—")
+    c[1].metric("Висота", num(b.height_m, " м"))
+    c[2].metric("Ширина × глибина", f"{num(b.width_m)} × {num(b.depth_m)} м" if b.width_m else "—")
+    c[3].metric("Клас наслідків", b.consequence_class or "—",
+                help=f"ДБН В.1.2-14:2018, табл. 1; оцінка ~{b.occupants_estimate or '—'} осіб за площею")
+    st.markdown(
+        f"<span class='muted'>Тип конструкції: <b>{STRUCTURE_NAMES_UA.get(b.structure_type or 'unknown')}</b> · "
+        f"дах: <b>{ {'flat': 'плаский', 'pitched': 'скатний'}.get(b.roof_type or '', 'невідомо')}</b> · "
+        f"визначено автоматично: {', '.join(sorted(b.auto_detected)) or '—'}</span>", unsafe_allow_html=True)
+    if b.assumptions:
+        st.caption("Припущення: " + "; ".join(assumption_ua(x) for x in b.assumptions))
+
+    with st.expander("✏️ Виправити параметри і перерахувати", expanded=False):
+        st.caption("Помилка на один поверх лінійно змінює всю вартість. Сегментація не перезапускається: "
+                   "перераховуються лише площі, рішення і вартість.")
         auto = lambda f: " (авто)" if f in b.auto_detected else ""
-        with st.form("params"):
+        with st.form("params", border=False):
             c1, c2, c3 = st.columns(3)
             floors = c1.number_input("Поверхів" + auto("floors"), 1, 60, b.floors or 1)
             floor_h = c2.number_input("Висота поверху, м", 2.0, 6.0, float(b.floor_height_m), 0.1)
@@ -274,64 +314,136 @@ def report_screen():
             structure = c6.selectbox("Тип конструкції" + auto("structure_type"), types,
                                      index=types.index(b.structure_type) if b.structure_type in types else
                                      types.index("unknown"), format_func=STRUCTURE_NAMES_UA.get)
-            if st.form_submit_button("Перерахувати"):
+            if st.form_submit_button("Перерахувати", type="primary"):
                 new = {"floors": int(floors), "floor_height_m": float(floor_h), "width_m": width or None,
                        "depth_m": depth or None, "roof_type": roof, "structure_type": structure}
                 old = {k: getattr(b, k) for k in new}
                 changes = {k: v for k, v in new.items() if v != old[k]}
                 if changes:
-                    recalculate(changes)
+                    with st.spinner("Перераховуємо…"):
+                        recalculate(changes)
                     st.rerun()
-        if st.session_state.get("recalc_time") is not None:
-            st.caption(f"Перераховано за {st.session_state.recalc_time:.2f} с без повторної сегментації.")
-        st.write(f"Висота {num(b.height_m, ' м')} ({b.height_source or '—'}); клас наслідків "
-                 f"{b.consequence_class or '—'} (~{b.occupants_estimate or '—'} осіб, оцінка за ДБН В.1.2-14:2018).")
-        if b.assumptions:
-            st.caption("Припущення: " + "; ".join(b.assumptions))
+    if st.session_state.get("recalc_time") is not None:
+        st.success(f"Перераховано за {st.session_state.recalc_time:.1f} с без повторної сегментації.", icon="✅")
 
-    st.subheader("Звіт у PDF")
-    if st.button("Підготувати PDF"):
-        st.session_state.pdf = build_pdf(report, seg.images)
+
+def damage_section(report):
+    section(3, "Виміряні пошкодження")
+    r, a = report.ratios, report.areas
+    c = st.columns(4)
+    c[0].metric("Фасад пошкоджено", pct(r.damaged_facade), help="Частка видимого фасаду по всіх видах")
+    c[1].metric("Найгірша секція фасаду", pct(r.worst_section_damage),
+                help="Третина ширини фасаду з найбільшою часткою пошкоджень в одному виді: показує зруйновану "
+                     "секцію, яку середнє по фасаду розмиває (ДСТУ 9273, п. 5.3)")
+    c[2].metric("Вікна пошкоджено", pct(r.broken_window))
+    c[3].metric("Дах пошкоджено", pct(r.damaged_roof))
+    rows = [
+        {"Поверхня": "Пошкодження фасаду", "Частка": pct(r.damaged_facade), "Найгірший вид": pct(r.worst_facade_damage),
+         "Площа, м²": round(a.damaged_facade_m2) if a and a.damaged_facade_m2 else None},
+        {"Поверхня": "Пошкоджені вікна", "Частка": pct(r.broken_window), "Найгірший вид": "",
+         "Площа, м²": round(a.broken_window_m2) if a and a.broken_window_m2 else None},
+        {"Поверхня": "Пошкодження даху", "Частка": pct(r.damaged_roof), "Найгірший вид": pct(r.worst_roof_damage),
+         "Площа, м²": round(a.damaged_roof_m2) if a and a.damaged_roof_m2 else None},
+    ]
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    notes = []
+    if a:
+        notes.append(f"Площа стін {num(a.wall_area_m2, ' м²')}, площа даху {num(a.roof_area_m2, ' м²')}.")
+    if r.damage_by_third:
+        low, mid, up = r.damage_by_third
+        notes.append(f"Пошкодження фасаду по висоті: нижня третина {low:.0%}, середня {mid:.0%}, верхня {up:.0%} "
+                     f"(пошкодження нижніх поверхів небезпечніші, ДСТУ 9273, п. 11.26).")
+    if notes:
+        st.caption(" ".join(notes))
+
+
+def conclusion_section(report):
+    section(4, "Висновок")
+    d = report.decision
+    if d is None:
+        st.info("Категорії не визначено.")
+        return
+    if d.escalation == "insufficient_data":
+        st.error(ESCALATION_UA[d.escalation] + f" (впевненість {d.confidence:.2f})")
+        return
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([2, 2, 1])
+        with c1:
+            st.caption("Категорія пошкоджень · Методика № 144, Додаток 3")
+            st.badge(f"{d.damage_category} — {DAMAGE_NAMES_UA[d.damage_category]}",
+                     color=DAMAGE_COLORS[d.damage_category])
+            st.markdown(f"<span class='muted'>Рекомендація: {DAMAGE_RECOMMENDATION_UA[d.damage_category]}</span>",
+                        unsafe_allow_html=True)
+        with c2:
+            st.caption("Технічний стан · ДСТУ 9273:2024, розділ 5")
+            st.badge(f"{d.condition_category} — {CONDITION_NAMES_UA[d.condition_category]}",
+                     color=CONDITION_COLORS[d.condition_category])
+            if d.roof_covering_category:
+                st.markdown(f"<span class='muted'>Покрівля за площею пошкоджень (табл. В.7.1): категорія "
+                            f"{d.roof_covering_category}</span>", unsafe_allow_html=True)
+        with c3:
+            st.metric("Впевненість", f"{d.confidence:.2f}")
+        (st.success if d.escalation == "confirmed" else st.warning)(ESCALATION_UA[d.escalation])
+
+
+def cost_section(report):
+    section(5, "Роботи і орієнтовна вартість")
+    d, k = report.decision, report.cost
+    c1, c2 = st.columns([2, 3])
+    with c1.container(border=True):
+        if k and k.total > 0:
+            st.caption("Орієнтовна вартість відновлення")
+            st.markdown(f"<div class='big-cost'>{uah(k.low)}<br>— {uah(k.high)}</div>", unsafe_allow_html=True)
+            st.caption(f"Ціни станом на {k.as_of}" + (f", джерело: {k.price_source}" if k.price_source else "")
+                       + f". Оцінено видів: {report.views_assessed}; що менше видів, то ширший діапазон.")
+        else:
+            st.info("Вартість не розраховано: невідомі розміри будівлі або немає цін. "
+                    "Вкажіть параметри в розділі 2.")
+    with c2:
+        if d and d.works:
+            rows = []
+            for w in d.works:
+                cost = sum(l.cost for l in k.lines if l.work_type == w.work_type) if k else None
+                rows.append({"Робота": WORK_NAMES_UA.get(w.work_type, w.work_type),
+                             "Обсяг, м²": round(w.quantity) if w.quantity else None,
+                             "Вартість, грн": round(cost) if cost else None})
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
+                         column_config={"Вартість, грн": st.column_config.NumberColumn(format="localized")})
+    if k and k.lines:
+        with st.expander("Розрахунок по позиціях: матеріали і робота"):
+            st.dataframe(pd.DataFrame([{
+                "Робота": WORK_NAMES_UA.get(l.work_type, l.work_type),
+                "Позиція": "робота (праця)" if l.item_name == "labour" else l.item_name,
+                "Кількість": round(l.quantity, 1), "Од.": l.unit, "Ціна, грн": l.unit_price,
+                "Сума, грн": round(l.cost), "Ціна від": l.price_date} for l in k.lines]),
+                hide_index=True, width="stretch")
+    if k and k.skipped_works:
+        st.caption("Не враховано: " + "; ".join(k.skipped_works))
+
+
+def pdf_section(report, seg):
+    section(6, "Звіт у PDF")
+    c1, c2 = st.columns([1, 3], vertical_alignment="center")
+    if c1.button("Підготувати PDF", icon="📄", width="stretch"):
+        with st.spinner("Формуємо PDF…"):
+            st.session_state.pdf = build_pdf(report, seg.images)
     if st.session_state.get("pdf"):
-        st.download_button("Завантажити PDF", st.session_state.pdf, file_name=f"zvit_{report.case_id}.pdf",
-                           mime="application/pdf")
+        c2.download_button("Завантажити PDF", st.session_state.pdf, file_name=f"zvit_{report.case_id}.pdf",
+                           mime="application/pdf", icon="⬇️", type="primary")
+    else:
+        c2.caption("Звіт за зведеною формою Методики № 144: фото з розміткою, параметри, виміри, висновок, "
+                   "роботи і вартість, джерела нормативів.")
 
 
-def masks_screen():
-    report = st.session_state.report
-    seg = st.session_state.seg
-    info = st.session_state.get("video_info")
-    if info:
-        st.info(f"Відео: нарізано {info['extracted']} кадрів (1 за секунду), відкинуто розмитих {info['blurred']}. "
-                f"Відео поділено на рівні відрізки, щоб охопити всі сторони будівлі; у кожному перевірено кандидатів "
-                f"(усього {info['checked']}) і взято той, де будівлю видно найкраще. Обрано видів: {info['selected']}.")
-        if info.get("rejected"):
-            st.caption("Відхилені кандидати: " + "; ".join(
-                f"{name} — " + reason.replace("building cut off on", "будівля обрізана з").replace("sides", "боків")
-                .replace("no building", "будівлі не видно") for name, reason in info["rejected"].items()))
-    legend = " ".join(f"<span style='background:rgb{tuple(c)};padding:2px 8px;border-radius:4px;"
-                      f"color:{'#fff' if sum(c) < 400 else '#000'}'>{LEGEND_UA[n]}</span>"
-                      for n, c in LEGEND.items() if n != "background")
-    st.markdown(legend, unsafe_allow_html=True)
-    for vid, err in report.skipped_frames.items():
-        st.error(f"Вид {vid} пропущено: {err}")
-    for f in report.frames:
-        st.markdown(f"**Вид {f.view_id}**")
-        c1, c2 = st.columns([3, 2])
-        c1.image(overlay(seg.images[f.view_id], seg.masks[f.view_id]), width="stretch")
-        c2.dataframe(pd.DataFrame([
-            {"Показник": "Пошкодження фасаду", "Значення": pct(f.damaged_facade_ratio)},
-            {"Показник": "Пошкоджені вікна", "Значення": pct(f.broken_window_ratio)},
-            {"Показник": "Найгірша секція фасаду", "Значення": pct(f.worst_section)},
-            {"Показник": "Пошкодження даху", "Значення": pct(f.damaged_roof_ratio)},
-            {"Показник": "Фасад займає кадру", "Значення": pct(f.facade_share)},
-            {"Показник": "Дах займає кадру", "Значення": pct(f.roof_share)},
-        ]), hide_index=True, width="stretch")
-        c2.write(("✅" if f.facade_usable else "❌") + " враховано для фасаду   " +
-                 ("✅" if f.roof_usable else "❌") + " враховано для даху")
-        for reason in f.excluded_reasons:
-            c2.caption("Відсіяно: " + reason.replace("facade", "фасад").replace("roof", "дах")
-                       .replace("of frame", "кадру"))
+def report_screen():
+    report, seg = st.session_state.report, st.session_state.seg
+    source_notice(report)
+    views_section(report, seg)
+    building_section(report)
+    damage_section(report)
+    conclusion_section(report)
+    cost_section(report)
+    pdf_section(report, seg)
 
 
 def admin_screen():
@@ -366,24 +478,34 @@ def admin_screen():
     st.dataframe(pd.DataFrame(prices.price_history(mid), columns=["Діє з", "Ціна, грн"]), hide_index=True)
 
 
+# ---------- page ----------
+
+st.markdown(CSS, unsafe_allow_html=True)
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(config.ROOT / ".env")
 has_key = bool(os.environ.get("GEMINI_API_KEY"))
-st.sidebar.toggle("Gemini API (платні запити)", key="use_gemini", disabled=not has_key,
-                  help="Вимкнено: жодних запитів, використовуються збережені відповіді або заглушки. "
-                       "Увімкнено: кожна нова оцінка — 2 запити, кожне редагування параметрів — 1 запит.")
-if not has_key:
-    st.sidebar.caption("Ключ GEMINI_API_KEY не задано.")
-# With the materials database, prices are edited on the separate "Materials admin" page (ui/pages/).
-sections = ["Оцінка"] + (["Адміністрування цін"] if config.get("prices", "source") == "csv" else [])
-page = st.sidebar.radio("Розділ", sections)
+with st.sidebar:
+    st.markdown("### 🏚️ Оцінка пошкоджень")
+    st.toggle("Gemini API (платні запити)", key="use_gemini", disabled=not has_key,
+              help="Вимкнено: жодних запитів, використовуються збережені відповіді або заглушки. "
+                   "Увімкнено: кожна нова оцінка — 2 запити, кожне редагування параметрів — 1 запит.")
+    if not has_key:
+        st.caption("Ключ GEMINI_API_KEY не задано.")
+    sections = ["Оцінка"] + (["Адміністрування цін"] if config.get("prices", "source") == "csv" else [])
+    page = st.radio("Розділ", sections, label_visibility="collapsed") if len(sections) > 1 else "Оцінка"
+    st.divider()
+    st.caption("Кольори масок: " + ", ".join(f"{LEGEND_UA[n]} — {COLOR_NAMES_UA[n]}"
+                                             for n in LEGEND if n != "background") + ".")
+    if "report" in st.session_state and st.button("Нова оцінка", icon="↩️", width="stretch"):
+        for key in ("report", "seg", "video_info", "pdf", "recalc_time"):
+            st.session_state.pop(key, None)
+        st.rerun()
+
 if page == "Оцінка":
-    upload_screen()
+    hero()
     if "report" in st.session_state:
-        tab_report, tab_masks = st.tabs(["Звіт", "Маски і метрики"])
-        with tab_report:
-            report_screen()
-        with tab_masks:
-            masks_screen()
+        report_screen()
+    else:
+        upload_screen()
 else:
     admin_screen()

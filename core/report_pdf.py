@@ -23,6 +23,18 @@ LEGEND_UA = {"background": "фон", "facade": "фасад", "roof": "дах", "
              "broken window": "пошкоджені вікна", "damaged roof": "пошкоджений дах"}
 
 
+ASSUMPTIONS_UA = {
+    "depth assumed equal to width (no corner view used)": "глибину прийнято рівною ширині",
+    "roof type unknown, flat roof assumed": "тип даху невідомий, прийнято плаский",
+    "floors not readable and no reference object: dimensions unknown, enter them":
+        "поверхи не читаються і немає еталонного об'єкта: розміри невідомі, введіть їх",
+}
+
+
+def assumption_ua(text: str) -> str:
+    return ASSUMPTIONS_UA.get(text, text)
+
+
 def _pct(x):
     return "не видно" if x is None else f"{x:.1%}"
 
@@ -90,27 +102,33 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     pdf.multi_cell(0, 5, DISCLAIMER_UA, fill=True, new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
 
-    # 1. Conclusion
-    _h(pdf, "1. Висновок")
-    d = report.decision
-    if d is None:
-        _p(pdf, "Шар прийняття рішень не запускався.")
-    elif d.escalation == "insufficient_data":
-        _p(pdf, f"Категорію не визначено (впевненість {d.confidence:.2f}). {ESCALATION_UA[d.escalation]}")
-    else:
-        _table(pdf, [
-            ["Показник", "Значення", "Документ"],
-            ["Категорія пошкоджень (основний результат)", f"{d.damage_category} — {DAMAGE_NAMES_UA[d.damage_category]}",
-             "Методика № 144, Додаток 3"],
-            ["Рекомендації щодо подальшої експлуатації", DAMAGE_RECOMMENDATION_UA[d.damage_category],
-             "Методика № 144, Додаток 3"],
-            ["Категорія технічного стану", f"{d.condition_category} — {CONDITION_NAMES_UA[d.condition_category]}",
-             "ДСТУ 9273:2024, розділ 5"],
-            ["Стан покрівлі за площею пошкоджень",
-             "—" if d.roof_covering_category is None else str(d.roof_covering_category), "ДСТУ 9273:2024, табл. В.7.1"],
-            ["Впевненість", f"{d.confidence:.2f}", ""],
-        ], widths=[60, 75, 45])
-        _p(pdf, ESCALATION_UA[d.escalation])
+    # 1. Views
+    if images:
+        _h(pdf, "1. Будівля і маски пошкоджень")
+        _p(pdf, "Кольори: " + ", ".join(f"{LEGEND_UA[name]} — {COLOR_NAMES_UA[name]}"
+                                        for name in LEGEND if name != "background") + ".")
+        # two views per row, 88 mm wide each
+        shown = [(v, im) for v, im in list(images.items())[:6] if report.masks.get(v) is not None]
+        for row in range(0, len(shown), 2):
+            pair = []
+            for view_id, image in shown[row:row + 2]:
+                im = Image.fromarray(overlay(image, report.masks[view_id]))
+                im.thumbnail((900, 900))
+                buf = io.BytesIO()
+                im.save(buf, format="JPEG", quality=85)
+                pair.append((view_id, buf, 88 * im.height / im.width))
+            h = max(p[2] for p in pair)
+            if pdf.get_y() + h + 10 > pdf.h - 15:
+                pdf.add_page()
+            y = pdf.get_y()
+            for i, (view_id, buf, _) in enumerate(pair):
+                x = pdf.l_margin + i * 92
+                pdf.set_xy(x, y)
+                pdf.set_font("dejavu", "", 8)
+                pdf.cell(88, 4, f"Вид {view_id}")
+                pdf.image(buf, x=x, y=y + 5, w=88)
+            pdf.set_xy(pdf.l_margin, y + h + 8)
+        pdf.ln(2)
 
     # 2. Building parameters
     _h(pdf, "2. Параметри будівлі")
@@ -133,7 +151,7 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
              "ДБН В.1.2-14:2018, табл. 1"],
         ], widths=[60, 60, 60])
         if b.assumptions:
-            _p(pdf, "Припущення: " + "; ".join(b.assumptions) + ".")
+            _p(pdf, "Припущення: " + "; ".join(assumption_ua(a) for a in b.assumptions) + ".")
 
     # 3. Damage measurements
     _h(pdf, "3. Виміряні пошкодження")
@@ -157,8 +175,30 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     if a:
         _p(pdf, f"Площа стін {_num(a.wall_area_m2, ' м²')}, площа даху {_num(a.roof_area_m2, ' м²')}.")
 
-    # 4. Works and cost
-    _h(pdf, "4. Перелік робіт і орієнтовна вартість")
+    # 4. Conclusion
+    _h(pdf, "4. Висновок")
+    d = report.decision
+    if d is None:
+        _p(pdf, "Шар прийняття рішень не запускався.")
+    elif d.escalation == "insufficient_data":
+        _p(pdf, f"Категорію не визначено (впевненість {d.confidence:.2f}). {ESCALATION_UA[d.escalation]}")
+    else:
+        _table(pdf, [
+            ["Показник", "Значення", "Документ"],
+            ["Категорія пошкоджень (основний результат)", f"{d.damage_category} — {DAMAGE_NAMES_UA[d.damage_category]}",
+             "Методика № 144, Додаток 3"],
+            ["Рекомендації щодо подальшої експлуатації", DAMAGE_RECOMMENDATION_UA[d.damage_category],
+             "Методика № 144, Додаток 3"],
+            ["Категорія технічного стану", f"{d.condition_category} — {CONDITION_NAMES_UA[d.condition_category]}",
+             "ДСТУ 9273:2024, розділ 5"],
+            ["Стан покрівлі за площею пошкоджень",
+             "—" if d.roof_covering_category is None else str(d.roof_covering_category), "ДСТУ 9273:2024, табл. В.7.1"],
+            ["Впевненість", f"{d.confidence:.2f}", ""],
+        ], widths=[60, 75, 45])
+        _p(pdf, ESCALATION_UA[d.escalation])
+
+    # 5. Works and cost
+    _h(pdf, "5. Перелік робіт і орієнтовна вартість")
     k = report.cost
     if d and d.works:
         rows = [["Робота", "Обсяг", "Вартість"]]
@@ -177,28 +217,6 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
                 f"чим менше видів, тим ширший діапазон.")
         if k.skipped_works:
             _p(pdf, "Не враховано: " + "; ".join(k.skipped_works) + ".")
-
-    # 5. Views
-    if images:
-        pdf.add_page()
-        _h(pdf, "5. Види з розміткою")
-        _p(pdf, "Кольори: " + ", ".join(f"{LEGEND_UA[name]} — {COLOR_NAMES_UA[name]}"
-                                        for name in LEGEND if name != "background") + ".")
-        for view_id, image in list(images.items())[:4]:
-            mask = report.masks.get(view_id)
-            if mask is None:
-                continue
-            im = Image.fromarray(overlay(image, mask))
-            im.thumbnail((1200, 1200))
-            buf = io.BytesIO()
-            im.save(buf, format="JPEG", quality=85)
-            w = 180
-            h = w * im.height / im.width
-            if pdf.get_y() + h + 10 > pdf.h - 15:
-                pdf.add_page()
-            _p(pdf, f"Вид {view_id}")
-            pdf.image(buf, w=w)
-            pdf.ln(3)
 
     _h(pdf, "Джерела")
     _p(pdf, "ДСТУ 9273:2024 «Настанова щодо обстеження будівель і споруд для визначення та оцінювання їхнього "

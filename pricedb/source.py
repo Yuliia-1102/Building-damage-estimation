@@ -25,7 +25,7 @@ from .prices import get_price_as_of as _db_price_as_of
 class MaterialsDbPriceSource:
     """PriceSource backed by the SQLite materials database."""
 
-    label = "materials database"
+    label = "база матеріалів і цін"
 
     def __init__(self, session: Session) -> None:
         self._session = session
