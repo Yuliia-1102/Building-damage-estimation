@@ -31,8 +31,14 @@ On CPU one photo takes 25-60 s (it is tiled into 518 px crops); loading the mode
 uv run streamlit run ui/app.py
 ```
 
-Pick the input mode (one photo, several photos, a video), upload, press «Оцінити». Without
-`GEMINI_API_KEY` in `.env` the app runs in demo mode with fixed building parameters and decision.
+Pick the input mode (one photo, several photos, a video), upload, press «Оцінити».
+
+Gemini requests are paid, so they are off by default: the sidebar toggle «Gemini API (платні запити)»
+turns them on (needs `GEMINI_API_KEY` in `.env`). While it is off, no request is sent: a case assessed
+before shows its cached Gemini answers, any other case gets fixed stub answers, and the report says which.
+The same rule holds for `cli.py` and `tools/run_testset.py`: requests only with `--gemini`.
+
+Materials and prices are edited on the separate «Materials admin» page in the sidebar.
 
 ## Run from the command line
 
@@ -80,9 +86,14 @@ ordering inspections: confirmed, preliminary, insufficient data.
 ## Cost
 
 `core/cost.py`: damaged area x (materials per m2 x price + labour per m2), widened into a range by
-the scale error and the number of views. Prices come from a `PriceSource`; until the materials
-database is connected it is `models/csv_prices.py` over `resources/prices_sample/` - sample numbers,
-not real prices, and the report says so. Prices have dates and are never overwritten.
+the scale error and the number of views. Prices come from a `PriceSource` chosen in `config.toml`
+`[prices] source`:
+- `db` (default): the materials database (`pricedb/`, epic 5), SQLite at `data/materials.db`, created and
+  seeded on first use (or `uv run python scripts/init_db.py`). It has no labour rates yet, so the
+  estimate covers materials only and the report says so.
+- `csv`: `resources/prices_sample/` - sample numbers with labour rates, not real prices.
+
+Prices have dates and are never overwritten. `scripts/show_prices.py` prints what the source returns.
 
 ## Video
 
@@ -122,11 +133,15 @@ models/            implementations of the interfaces
   gemini_client.py                shared Gemini call: schema, retry, cache
   gemini_building.py              building parameters from a photo
   gemini_decision.py              categories and works from the numbers
-  csv_prices.py                   price source over CSV, with history and admin functions
+  csv_prices.py                   price source over the sample CSV files
+  price_source.py                 picks the database or the CSV source from config.toml
+  offline.py                      cached Gemini answers or stubs, never a request
   dino_embedder.py                frame embeddings for video
   stub.py                         stand-ins for tests and demo mode
-ui/app.py          Streamlit app
-tools/             cvat.py (dataset -> masks), run_testset.py, consistency.py
+pricedb/           materials database: schema, seed data, price history, PriceSource (epic 5)
+scripts/           init_db.py, show_prices.py
+ui/app.py          Streamlit app; ui/pages/1_Materials_admin.py - materials and prices admin
+tools/             cvat.py (dataset -> masks), run_testset.py, consistency.py, model_bench.py
 testset/           test cases and expectations
 resources/         sample prices, fonts for the PDF
 tests/

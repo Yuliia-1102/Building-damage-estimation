@@ -6,7 +6,8 @@ weights = "weights/dinov2_b2b_6class.pt"
 cache = "cache"
 cases = "data/cases"
 output = "output"
-prices_csv = "resources/prices_sample"   # used until the materials database is connected
+materials_db = "data/materials.db"      # created and seeded on first use (scripts/init_db.py does the same)
+prices_csv = "resources/prices_sample"   # sample prices with labour rates, used when [prices] source = "csv"
 
 [segmentation]
 # Not used yet: the model tiles the full-size photo into 518 px crops. Downscaling would cut CPU time (task 2.4).
@@ -47,6 +48,7 @@ views_k = 5             # task 8.4, between 4 and 6
 embedding_model = "vit_small_patch14_reg4_dinov2.lvd142m"   # timm, cached from Hugging Face
 
 [prices]
+source = "db"           # "db": materials database (epic 5); "csv": resources/prices_sample
 max_candidates = 10     # task 5.5
 
 [decision]

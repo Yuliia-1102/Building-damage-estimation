@@ -18,6 +18,7 @@ def estimate_cost(works: list[WorkItem], prices: PriceSource, views: int,
     as_of = as_of or date.today()
     limit = config.get("prices", "max_candidates")
     lines, skipped = [], []
+    no_labour = []
 
     for work in works:
         if work.quantity is None:
@@ -38,9 +39,14 @@ def estimate_cost(works: list[WorkItem], prices: PriceSource, views: int,
             value, valid_from = labour
             work_lines.append(CostLine(work.work_type, "labour", work.quantity, work.unit, value,
                                        work.quantity * value, valid_from))
+        else:
+            no_labour.append(work.work_type)
         if not work_lines:
             skipped.append(f"{work.work_type}: no prices in the catalogue")
         lines += work_lines
+
+    if no_labour:
+        skipped.append("вартість роботи (праці): у джерелі цін немає розцінок, пораховано лише матеріали")
 
     total = sum(line.cost for line in lines)
     low, high = geometry.value_range(total, views)

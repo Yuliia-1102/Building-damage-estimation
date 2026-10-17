@@ -4,7 +4,7 @@
 
 By default the trained model is used (weights path in config.toml), with masks cached on disk.
 --masks DIR uses ready-made masks (e.g. from tools/cvat.py), --stub a fake mask without weights.
---gemini uses the real decision layer (needs GEMINI_API_KEY), otherwise a fixed stub answer.
+--gemini sends paid Gemini requests (needs GEMINI_API_KEY); otherwise cached Gemini answers, or stubs.
 """
 import argparse
 import dataclasses
@@ -16,7 +16,7 @@ from core import cache, config
 from core.case import case_from_folder
 from core.output import save_views
 from core.pipeline import evaluate, segment_case
-from models.csv_prices import CsvPriceSource
+from models.price_source import default_price_source
 from core.types import Report
 from models.stub import MaskFolderSegmenter, StubBuildingParams, StubDecisionLayer, StubSegmenter
 
@@ -124,9 +124,13 @@ def main() -> None:
         from models.gemini_decision import GeminiDecisionLayer
         decision_layer = GeminiDecisionLayer(use_cache=not args.no_cache)
         building_estimator = GeminiBuildingEstimator(use_cache=not args.no_cache)
-    else:
+    elif args.stub or args.masks:
         decision_layer = StubDecisionLayer()
         building_estimator = StubBuildingParams()
+    else:           # no requests: cached Gemini answers, stubs where nothing is cached
+        from models.offline import CachedOrStubBuilding, CachedOrStubDecision
+        decision_layer = CachedOrStubDecision()
+        building_estimator = CachedOrStubBuilding()
 
     from core.video import VIDEO_EXTS
     if args.input.suffix.lower() in VIDEO_EXTS:
@@ -140,7 +144,7 @@ def main() -> None:
     seg = segment_case(case, segmenter)
     if args.save:
         save_views(seg, args.save)
-    prices = CsvPriceSource()
+    prices = default_price_source()
     report = evaluate(seg, building_estimator=building_estimator, decision_layer=decision_layer,
                       price_source=prices)
     if args.floors is not None and report.building is not None:

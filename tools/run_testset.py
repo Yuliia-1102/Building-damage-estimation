@@ -1,7 +1,8 @@
 """Run every test case with one command and write one table (tasks 9.3, 9.4).
 
-    uv run python -m tools.run_testset testset/cases.csv --out output/testset.csv
-    uv run python -m tools.run_testset testset/cases.csv --repeat 3 --no-decision-cache   # consistency check
+    uv run python -m tools.run_testset testset/cases.csv --out output/testset.csv            # cache only, free
+    uv run python -m tools.run_testset testset/cases.csv --gemini                            # paid requests
+    uv run python -m tools.run_testset testset/cases.csv --gemini --repeat 3 --no-decision-cache   # consistency
 
 A case that crashes is recorded with its error and the run goes on. Masks are cached, so repeats only
 re-run the language model; --no-decision-cache makes every repeat ask the model again, which is what
@@ -21,7 +22,7 @@ from core.cache import CachedSegmenter
 from core.case import case_from_paths, case_from_video
 from core.pipeline import evaluate, segment_case
 from core.video import VIDEO_EXTS
-from models.csv_prices import CsvPriceSource
+from models.price_source import default_price_source
 
 log = logging.getLogger("testset")
 
@@ -55,6 +56,8 @@ def main() -> None:
     p.add_argument("--repeat", type=int, default=1)
     p.add_argument("--no-decision-cache", action="store_true")
     p.add_argument("--stub", action="store_true", help="stub segmentation and decision (pipeline check only)")
+    p.add_argument("--gemini", action="store_true",
+                   help="send paid Gemini requests; without it only cached answers are used, stubs otherwise")
     p.add_argument("--only", nargs="*", help="case ids to run")
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s",
@@ -62,7 +65,7 @@ def main() -> None:
 
     from dotenv import load_dotenv
     load_dotenv(config.ROOT / ".env")
-    use_llm = bool(os.environ.get("GEMINI_API_KEY")) and not args.stub
+    use_llm = args.gemini and bool(os.environ.get("GEMINI_API_KEY")) and not args.stub
     if args.stub:
         from models.stub import StubSegmenter
         segmenter = StubSegmenter()
@@ -73,10 +76,13 @@ def main() -> None:
         from models.gemini_building import GeminiBuildingEstimator
         from models.gemini_decision import GeminiDecisionLayer
         building = GeminiBuildingEstimator()
-    else:
+    elif args.stub:
         from models.stub import StubBuildingParams, StubDecisionLayer
         building, decision = StubBuildingParams(), StubDecisionLayer()
-        log.warning("no GEMINI_API_KEY or --stub: building parameters and decision are stubs")
+    else:
+        from models.offline import CachedOrStubBuilding, CachedOrStubDecision
+        building, decision = CachedOrStubBuilding(), CachedOrStubDecision()
+        log.warning("no --gemini: cached Gemini answers only, stubs where nothing is cached")
 
     embedder = None
 
@@ -91,7 +97,7 @@ def main() -> None:
     rows = list(csv.DictReader(open(args.cases, encoding="utf-8")))
     if args.only:
         rows = [r for r in rows if r["case_id"] in args.only]
-    prices = CsvPriceSource()
+    prices = default_price_source()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     segs = {}
 

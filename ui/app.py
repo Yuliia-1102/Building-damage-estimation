@@ -28,7 +28,6 @@ from core.pipeline import evaluate, segment_case  # noqa: E402
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA,  # noqa: E402
                             DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
 from core.report_pdf import LEGEND_UA, build_pdf  # noqa: E402
-from models.csv_prices import CsvPriceSource  # noqa: E402
 
 st.set_page_config(page_title="Оцінка пошкоджень будівлі", page_icon="🏚️", layout="wide")
 
@@ -59,20 +58,30 @@ def get_embedder():
     return DinoEmbedder()
 
 
+def gemini_on() -> bool:
+    """Paid Gemini requests only when the toggle in the sidebar is on (it is off by default)."""
+    return st.session_state.get("use_gemini", False)
+
+
 @st.cache_resource
-def get_language_layers():
-    from dotenv import load_dotenv
-    load_dotenv(config.ROOT / ".env")
-    if os.environ.get("GEMINI_API_KEY"):
+def _layers(online: bool):
+    if online:
         from models.gemini_building import GeminiBuildingEstimator
         from models.gemini_decision import GeminiDecisionLayer
-        return GeminiBuildingEstimator(), GeminiDecisionLayer(), True
-    from models.stub import StubBuildingParams, StubDecisionLayer
-    return StubBuildingParams(), StubDecisionLayer(), False
+        return GeminiBuildingEstimator(), GeminiDecisionLayer()
+    from models.offline import CachedOrStubBuilding, CachedOrStubDecision
+    return CachedOrStubBuilding(), CachedOrStubDecision()
 
 
-def get_prices() -> CsvPriceSource:
-    return CsvPriceSource()
+def get_language_layers():
+    """(building estimator, decision layer, online). Offline: cached Gemini answers, otherwise stubs."""
+    online = gemini_on()
+    return *_layers(online), online
+
+
+def get_prices():
+    from models.price_source import default_price_source
+    return default_price_source()
 
 
 # ---------- helpers ----------
@@ -162,10 +171,15 @@ def upload_screen():
 def report_screen():
     report = st.session_state.report
     seg = st.session_state.seg
-    _, _, real_llm = get_language_layers()
+    building_layer, decision_layer, online = get_language_layers()
     _, real_seg = get_segmenter()
-    if not real_llm:
-        st.warning("Демо-режим: ключ Gemini не задано, параметри будівлі і класифікація — фіксовані заглушки.")
+    if not online:
+        sources = {getattr(building_layer, "last_source", None), getattr(decision_layer, "last_source", None)}
+        if "stub" in sources:
+            st.warning("Gemini вимкнено, а для цього випадку немає збережених відповідей: параметри будівлі "
+                       "і класифікація — фіксовані заглушки. Увімкніть Gemini в бічній панелі для реальної оцінки.")
+        else:
+            st.info("Gemini вимкнено: показано збережені раніше відповіді Gemini для цього випадку (без запитів).")
     if not real_seg:
         st.warning("Ваги моделі сегментації не знайдено: маски — заглушки.")
     for e in report.errors:
@@ -325,7 +339,17 @@ def admin_screen():
     st.dataframe(pd.DataFrame(prices.price_history(mid), columns=["Діє з", "Ціна, грн"]), hide_index=True)
 
 
-page = st.sidebar.radio("Розділ", ["Оцінка", "Адміністрування цін"])
+from dotenv import load_dotenv  # noqa: E402
+load_dotenv(config.ROOT / ".env")
+has_key = bool(os.environ.get("GEMINI_API_KEY"))
+st.sidebar.toggle("Gemini API (платні запити)", key="use_gemini", disabled=not has_key,
+                  help="Вимкнено: жодних запитів, використовуються збережені відповіді або заглушки. "
+                       "Увімкнено: кожна нова оцінка — 2 запити, кожне редагування параметрів — 1 запит.")
+if not has_key:
+    st.sidebar.caption("Ключ GEMINI_API_KEY не задано.")
+# With the materials database, prices are edited on the separate "Materials admin" page (ui/pages/).
+sections = ["Оцінка"] + (["Адміністрування цін"] if config.get("prices", "source") == "csv" else [])
+page = st.sidebar.radio("Розділ", sections)
 if page == "Оцінка":
     upload_screen()
     if "report" in st.session_state:
