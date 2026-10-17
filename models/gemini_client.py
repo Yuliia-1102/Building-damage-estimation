@@ -32,6 +32,7 @@ class GeminiJSON:
         self.model = model or config.get("decision", "model")
         self.retries = retries
         self.use_cache = use_cache
+        self.last_from_cache: bool | None = None    # whether the last answer came from the cache (no request)
 
     def _call(self, contents: list, schema: type[BaseModel], system: str) -> str:
         """One request; on 429 (rate limit) or 503 (overloaded) waits 2, 4, 8 ... seconds and tries again."""
@@ -85,7 +86,9 @@ class GeminiJSON:
         (the prompt text and the hashes of any images)."""
         key = cache.text_key("\n".join([self.model, system, *key_parts]))
         if self.use_cache and (hit := cache.get_json(namespace, key)) is not None:
+            self.last_from_cache = True
             return schema.model_validate(hit)
+        self.last_from_cache = False
 
         last_error = None
         for attempt in range(1, self.retries + 2):
