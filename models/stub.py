@@ -60,7 +60,11 @@ class StubDecisionLayer:
 
         damaged = {"damaged_facade": ratios.damaged_facade, "broken_window": ratios.broken_window,
                    "damaged_roof": ratios.damaged_roof}
-        codes = [w.code for w in WORK_TYPES if damaged[w.damage_class.name.lower()]]
+        codes, groups = [], set()
+        for w in WORK_TYPES:             # first alternative of each group, plus finishing works
+            if damaged[w.damage_class.name.lower()] and (w.group is None or w.group not in groups):
+                codes.append(w.code)
+                groups.add(w.group)
         return Decision(damage_category="I", condition_category=2, confidence=0.6,
                         works=works_with_quantities(codes, areas), escalation=escalation_level(0.6),
                         roof_covering_category=roof_covering_category(ratios.damaged_roof))

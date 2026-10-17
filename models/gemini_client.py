@@ -6,6 +6,7 @@ schema validation (task 6.1), retry on a malformed answer (6.1.3) and answer cac
 import json
 import logging
 import os
+import time
 
 from pydantic import BaseModel, ValidationError
 
@@ -31,6 +32,20 @@ class GeminiJSON:
         self.use_cache = use_cache
 
     def _call(self, contents: list, schema: type[BaseModel], system: str) -> str:
+        """One request; on 429 (rate limit) or 503 (overloaded) waits 2, 4, 8 ... seconds and tries again."""
+        from google.genai import errors
+        attempts = config.get("decision", "retry_on_overload")
+        for attempt in range(attempts):
+            try:
+                return self._request(contents, schema, system)
+            except errors.APIError as e:
+                if e.code not in (429, 500, 503) or attempt == attempts - 1:
+                    raise
+                wait = 2 ** (attempt + 1)
+                log.warning("Gemini %s, retrying in %ds", e.code, wait)
+                time.sleep(wait)
+
+    def _request(self, contents: list, schema: type[BaseModel], system: str) -> str:
         from google.genai import types
         response = self.client.models.generate_content(
             model=self.model,

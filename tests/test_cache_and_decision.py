@@ -119,3 +119,11 @@ def test_prompt_has_worst_view_and_vertical_split():
     assert "worst single view of the facade: 60.0%" in prompt
     assert "lower third 70%" in prompt
     assert "table В.7.1): category 4" in prompt
+
+
+def test_two_alternative_repairs_of_same_area_are_rejected():
+    double = json.dumps({"damage_category": "II", "condition_category": 3, "confidence": 0.7,
+                         "work_types": ["facade_plaster_repair", "facade_masonry_repair"]})
+    client = FakeClient(double, GOOD)
+    d = GeminiDecisionLayer(client=client, model="fake").decide(RATIOS, AREAS, None)
+    assert client.calls == 2 and [w.work_type for w in d.works] == ["facade_masonry_repair", "window_unit_replacement"]

@@ -7,10 +7,11 @@ The scales are described on the Confluence page "Condition and damage scales".
 """
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.decision import escalation_level, works_with_quantities
-from core.reference import CONDITION_CATEGORIES, DAMAGE_CATEGORIES, WORK_TYPES, roof_covering_category
+from core.reference import (CONDITION_CATEGORIES, DAMAGE_CATEGORIES, WORK_TYPES, WORK_TYPES_BY_CODE,
+                            roof_covering_category)
 from core.types import BuildingParams, CombinedRatios, DamagedAreas, Decision
 from models.gemini_client import GeminiJSON
 
@@ -23,6 +24,16 @@ class DecisionResponse(BaseModel):
     condition_category: int = Field(ge=1, le=4, description="Technical condition category, ДСТУ 9273:2024")
     confidence: float = Field(ge=0.0, le=1.0, description="How sure the categories are, 0-1")
     work_types: list[WorkTypeCode] = Field(description="Work type codes needed to restore the building")
+
+    @field_validator("work_types")
+    @classmethod
+    def one_repair_per_surface(cls, codes):
+        """Two alternative repairs of the same area would count the same square metres twice."""
+        groups = [WORK_TYPES_BY_CODE[c].group for c in set(codes) if WORK_TYPES_BY_CODE[c].group]
+        dup = {g for g in groups if groups.count(g) > 1}
+        if dup:
+            raise ValueError(f"more than one alternative work chosen for: {', '.join(sorted(dup))}")
+        return codes
 
 
 SYSTEM_INSTRUCTION = """\
@@ -45,7 +56,9 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
     damage_scale = "\n".join(f"  {k} - {name}: {desc} Indicative damage of the whole building {pct}."
                              for k, (name, desc, pct, _) in DAMAGE_CATEGORIES.items())
     condition_scale = "\n".join(f"  {k} - {name}: {desc}" for k, (name, desc) in CONDITION_CATEGORIES.items())
-    works = "\n".join(f"  {w.code}  (repairs {w.damage_class.name.lower()}): {w.name}" for w in WORK_TYPES)
+    works = "\n".join(f"  {w.code}  (repairs {w.damage_class.name.lower()}"
+                      f"{', alternatives group ' + w.group if w.group else ', finishing, can be added'}): {w.name}"
+                      for w in WORK_TYPES)
     roof_cat = roof_covering_category(ratios.damaged_roof)
 
     lines = [
@@ -97,7 +110,10 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
         "visible; the measured shares above are only the visible surface. Do not map them one to one.",
         "- The two answers must be consistent: I usually goes with condition 1-2, II with 3, III with 4.",
         "- Choose work types only for surfaces that show damage. A surface marked 'not visible' was not "
-        "assessed: do not add works for it. For each damaged surface choose the works matching the severity.",
+        "assessed: do not add works for it.",
+        "- Works in the same alternatives group repair the same area in different ways: choose at most ONE per "
+        "group, the one matching the severity (e.g. masonry repair for destroyed walls, plaster repair for "
+        "surface damage). Finishing works can be added on top.",
         "- confidence: low when few views were assessed, a surface is not visible, or the measurements are "
         "borderline between two categories; high only when the category is clear. Load-bearing structures "
         "cannot be seen in photos, so be cautious with categories II-III and 3-4.",

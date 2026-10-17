@@ -50,8 +50,11 @@ embedding_model = "vit_small_patch14_reg4_dinov2.lvd142m"   # timm, cached from 
 max_candidates = 10     # task 5.5
 
 [decision]
-# Gemini model for the decision layer; check available names with client.models.list().
-model = "gemini-2.5-flash"
+# Gemini model for building parameters and the decision layer. Checked on 2026-10-17 with a free-tier key:
+# gemini-2.5-* is no longer available to new keys; gemini-3.8-flash reads photos and counted floors correctly.
+# A fixed name, not "gemini-flash-latest", so repeated runs use the same model (consistency check).
+model = "gemini-3.8-flash"
+retry_on_overload = 4          # attempts on 429 / 503, with exponential backoff
 seed = 42   # fixed with temperature 0, for repeatable answers (task 9.4)
 
 [ui]

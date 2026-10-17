@@ -59,16 +59,19 @@ class WorkType:
     damage_class: Cls
     name: str
     unit: str = "m2"
+    # Works in the same group are alternatives for the same area (by severity): at most one is chosen,
+    # otherwise the same square metres would be paid for twice. None = can be added on top (finishing).
+    group: str | None = None
 
 
 WORK_TYPES = [
-    WorkType("facade_plaster_repair", Cls.DAMAGED_FACADE, "Facade plaster repair"),
-    WorkType("facade_masonry_repair", Cls.DAMAGED_FACADE, "Masonry wall repair"),
+    WorkType("facade_plaster_repair", Cls.DAMAGED_FACADE, "Facade plaster repair", group="facade_repair"),
+    WorkType("facade_masonry_repair", Cls.DAMAGED_FACADE, "Masonry wall repair", group="facade_repair"),
     WorkType("facade_painting", Cls.DAMAGED_FACADE, "Facade painting"),
-    WorkType("window_glazing_replacement", Cls.BROKEN_WINDOW, "Glazing replacement"),
-    WorkType("window_unit_replacement", Cls.BROKEN_WINDOW, "Window unit replacement"),
-    WorkType("roof_covering_repair", Cls.DAMAGED_ROOF, "Roof covering repair"),
-    WorkType("roof_covering_replacement", Cls.DAMAGED_ROOF, "Roof covering replacement"),
+    WorkType("window_glazing_replacement", Cls.BROKEN_WINDOW, "Glazing replacement", group="window"),
+    WorkType("window_unit_replacement", Cls.BROKEN_WINDOW, "Window unit replacement", group="window"),
+    WorkType("roof_covering_repair", Cls.DAMAGED_ROOF, "Roof covering repair", group="roof"),
+    WorkType("roof_covering_replacement", Cls.DAMAGED_ROOF, "Roof covering replacement", group="roof"),
 ]
 
 WORK_TYPES_BY_CODE = {w.code: w for w in WORK_TYPES}
