@@ -54,7 +54,7 @@ class StubBuildingParams:
 class StubDecisionLayer:
     """Fixed answer: damage category I, condition 2, every work type whose surface has damage."""
 
-    def decide(self, ratios: CombinedRatios, areas: DamagedAreas | None, building) -> Decision:
+    def decide(self, ratios: CombinedRatios, areas: DamagedAreas | None, building, views=None) -> Decision:
         from core.decision import escalation_level, works_with_quantities
         from core.reference import WORK_TYPES, roof_covering_category
 

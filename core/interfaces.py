@@ -21,8 +21,9 @@ class BuildingParamsEstimator(Protocol):
 
 class DecisionLayer(Protocol):
     def decide(self, ratios: CombinedRatios, areas: DamagedAreas | None,
-               building: BuildingParams | None) -> Decision:
-        """Numbers in, structured answer out. No arithmetic on prices here."""
+               building: BuildingParams | None, views: dict | None = None) -> Decision:
+        """Numbers (and optionally the views: view_id -> (image, mask)) in, structured answer out.
+        No arithmetic on prices here."""
         ...
 
 

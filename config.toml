@@ -67,6 +67,9 @@ max_candidates = 10     # task 5.5
 # Fixed names, not "gemini-flash-latest", so repeated runs use the same model (consistency check).
 model = "gemini-3.1-flash-lite"
 building_model = "gemini-3.8-flash"
+# Views shown to the decision model with the segmentation drawn over them (worst section, worst facade view,
+# worst roof view first). About 1,100 input tokens each; 0 = numbers only.
+max_images = 3
 retry_on_overload = 4          # attempts on 429 / 503, with exponential backoff
 seed = 42   # fixed with temperature 0, for repeatable answers (task 9.4)
 

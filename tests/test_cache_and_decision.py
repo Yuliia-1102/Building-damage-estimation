@@ -135,3 +135,25 @@ def test_roof_works_follow_the_roof_type():
     assert match_roof_type(codes, "flat") == ["flat_roof_replacement", "facade_painting"]
     assert match_roof_type(["flat_roof_repair"], "pitched") == ["roof_covering_repair"]
     assert match_roof_type(codes, None) == codes
+
+
+def test_decision_shows_the_worst_views_and_caches_by_image():
+    from core.types import Cls
+    image = np.full((60, 80, 3), 120, np.uint8)
+    mask = np.full((60, 80), Cls.FACADE, np.uint8)
+    mask[10:30, 10:40] = Cls.DAMAGED_FACADE
+    views = {1: (image, mask), 2: (image, np.zeros_like(mask)), 3: (image, mask.copy())}
+    ratios = CombinedRatios(0.3, 0.1, None, 3, 0, worst_facade_view=3, worst_section_view=3)
+    seen = []
+    client = FakeClient(GOOD, GOOD)
+    client.models = SimpleNamespace(generate_content=lambda model, contents, config:
+                                    seen.append(contents) or SimpleNamespace(text=GOOD))
+    layer = GeminiDecisionLayer(client=client, model="fake")
+    layer.decide(ratios, AREAS, None, views=views)
+    assert len(seen) == 1 and len(seen[0]) == 4            # prompt + 3 images
+    assert "views 3, 1, 2" in seen[0][0]                   # worst section first
+    layer.decide(ratios, AREAS, None, views=views)
+    assert len(seen) == 1                                   # same images: from the cache
+    views[3] = (np.random.default_rng(0).integers(0, 255, image.shape, dtype=np.uint8), mask)
+    layer.decide(ratios, AREAS, None, views=views)
+    assert len(seen) == 2                                   # another image: a new request

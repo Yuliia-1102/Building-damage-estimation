@@ -68,7 +68,8 @@ Masks are cached in `cache/masks/` by the content hash of the photo, and decisio
 
 ## Building parameters
 
-Gemini looks at the frame with the most facade and returns the floor count, structure type, roof
+Gemini (gemini-3.8-flash) looks at the frame with the most facade, cropped to the building (no mask drawn,
+so windows and floor lines stay clean; the next frames are tried if floors cannot be read), and returns the floor count, structure type, roof
 type and, if floors cannot be read, a door, car or person with its box (fallback heights 2.1 / 1.5 /
 1.7 m). Code turns the height into a scale using the facade in the mask, then width; depth is assumed
 equal to width. A rough consequence class (ДБН В.1.2-14:2018, table 1) is estimated from the size.
@@ -77,7 +78,10 @@ Every detected value is marked as automatic and can be corrected; the pipeline i
 
 ## Decision layer
 
-The language model receives only numbers and returns fixed fields validated against a schema:
+The language model (gemini-3.1-flash-lite) receives the measurements and up to `[decision] max_images`
+views (worst section, worst facade view, worst roof view first), cropped to the building with the
+segmentation drawn over them (light fill and outlines, so the photo stays visible). The numbers are the
+main evidence; the images show what the damage is. It returns fixed fields validated against a schema:
 damage category I-III (Methodology No. 144, Додаток 3), technical condition 1-4 (ДСТУ 9273:2024),
 a confidence and work type codes from `core/reference.py`. The prompt also gets the worst single
 view, the share of damage in the lower / middle / upper third of the facade and the roof covering

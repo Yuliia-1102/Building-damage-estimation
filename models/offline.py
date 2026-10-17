@@ -48,9 +48,9 @@ class CachedOrStubDecision:
         self.stub = StubDecisionLayer()
         self.last_source = None
 
-    def decide(self, ratios, areas, building):
+    def decide(self, ratios, areas, building, views=None):
         try:
-            d = self.gemini.decide(ratios, areas, building)
+            d = self.gemini.decide(ratios, areas, building, views=views)
             self.last_source = "cache"
             return d
         except NotCached:

@@ -5,9 +5,9 @@
 
 | kind | count | what it is |
 |---|---|---|
-| generated_video | 8 | one Lyra-2 orbit per building from the paper's video corpus, only videos watched and approved by the team (2026-10-17): others had the camera going underground or invented walls |
-| photo | 1 | a single ground-level photo |
-| photos | 1 | six photos of one building |
+| generated_video | 7 | one Lyra-2 orbit per building from the paper's video corpus, only videos watched and approved by the team (2026-10-17): others had the camera going underground or invented walls |
+| photo | 2 | single ground-level photos |
+| photos | 1 | five frames of the download12_2 orbit saved as photos: the same building as a video case, so the two modes can be compared |
 
 Limitations, to be stated at the defence:
 - The generated videos are made from one real photo each; the other sides of the building are invented

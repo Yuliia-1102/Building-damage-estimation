@@ -247,6 +247,9 @@ def main() -> None:
                     suffix = "" if args.repeat == 1 else f"_run{run}"
                     (case_dir / f"report{suffix}.json").write_text(report_json(r), encoding="utf-8")
                     (case_dir / "decision_prompt.txt").write_text(build_prompt(c, r.areas, b), encoding="utf-8")
+                    layer = getattr(decision, "gemini", decision)          # offline wraps the Gemini layer
+                    for n, data in enumerate(getattr(layer, "last_images", []), start=1):
+                        (case_dir / f"decision_image{n}.jpg").write_bytes(data)
                 except Exception as e:      # a crashed case is recorded, the run goes on (task 9.3.3)
                     log.error("case %s failed:\n%s", row["case_id"], traceback.format_exc())
                     out["error"] = f"{type(e).__name__}: {e}"

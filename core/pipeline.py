@@ -94,7 +94,8 @@ def evaluate(seg: Segmentation,
 
     if decision_layer is not None and seg.frames:
         try:
-            report.decision = decision_layer.decide(report.ratios, report.areas, report.building)
+            views = {i: (seg.images[i], seg.masks[i]) for i in (f.view_id for f in seg.frames)}
+            report.decision = decision_layer.decide(report.ratios, report.areas, report.building, views=views)
             log.info("decision: %s", report.decision)
         except Exception as e:
             log.exception("decision layer failed")

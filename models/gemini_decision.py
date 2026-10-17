@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field, field_validator
 from core.decision import escalation_level, match_roof_type, works_with_quantities
 from core.reference import (CONDITION_CATEGORIES, DAMAGE_CATEGORIES, WORK_TYPES, WORK_TYPES_BY_CODE,
                             roof_covering_category)
+from core import cache, config
+from core.imageio import building_box, overlay_for_model
 from core.types import BuildingParams, CombinedRatios, DamagedAreas, Decision
 from models.gemini_client import GeminiJSON
 
@@ -38,9 +40,18 @@ class DecisionResponse(BaseModel):
 
 SYSTEM_INSTRUCTION = """\
 You make a preliminary visual assessment of a damaged building, used only to order buildings for on-site
-inspection. You receive measurements extracted from photographs by a segmentation model; you do not see
-the photos. Answer only with the JSON fields requested. Do not compute costs or quantities.
+inspection. You receive measurements extracted from photographs by a segmentation model and, when available,
+a few of those photographs with the segmentation drawn over them. Answer only with the JSON fields requested.
+Do not compute costs or quantities.
 """
+
+IMAGES_NOTE = """\
+Images: {n} views of the building with the segmentation drawn over them, cropped to the building (views {ids}).
+Colours: green = intact facade, purple = damaged facade, blue = broken windows, orange = intact roof,
+red = damaged roof; uncoloured = not building. The fill is light so the photo stays visible under it.
+The measured shares above are the main evidence. Use the images to judge what the damage is: holes through
+walls, collapsed or burnt-out parts, missing floors, versus surface damage to plaster or cladding. The
+segmentation can be wrong; trust what the photo shows."""
 
 
 def _pct(x: float | None) -> str:
@@ -135,16 +146,44 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
     return "\n".join(lines)
 
 
+def pick_views(ratios: CombinedRatios, views: dict, limit: int) -> list[int]:
+    """Which views to show: the worst facade section, the worst facade view, the worst roof view, then the
+    views with the most building, up to `limit`."""
+    order = [ratios.worst_section_view, ratios.worst_facade_view, ratios.worst_roof_view]
+    order += sorted(views, key=lambda v: -(views[v][1] > 0).mean())
+    return [v for v in dict.fromkeys(order) if v in views][:limit]
+
+
+def view_jpeg(image, mask, max_side: int = 1024) -> bytes:
+    """The view as the model sees it: cropped to the building, segmentation drawn over it, longer side 1024 px."""
+    from models.gemini_building import _jpeg
+    top, bottom, left, right = building_box(mask)
+    return _jpeg(overlay_for_model(image[top:bottom, left:right], mask[top:bottom, left:right]), max_side)
+
+
 class GeminiDecisionLayer:
     def __init__(self, client=None, model: str | None = None, retries: int = 2, use_cache: bool = True):
         self.llm = GeminiJSON(client=client, model=model, retries=retries, use_cache=use_cache)
+        self.last_images: list[bytes] = []       # what was shown to the model, saved with test runs
 
-    def ask(self, prompt: str) -> DecisionResponse:
-        return self.llm.ask([prompt], DecisionResponse, SYSTEM_INSTRUCTION, "decisions", [prompt])
+    def ask(self, prompt: str, images: list[bytes] = ()) -> DecisionResponse:
+        parts = [prompt]
+        if images:
+            from google.genai import types
+            parts += [types.Part.from_bytes(data=d, mime_type="image/jpeg") for d in images]
+        key = [prompt, *(cache.text_key(d.hex()) for d in images)]
+        return self.llm.ask(parts, DecisionResponse, SYSTEM_INSTRUCTION, "decisions", key)
 
     def decide(self, ratios: CombinedRatios, areas: DamagedAreas | None,
-               building: BuildingParams | None) -> Decision:
-        answer = self.ask(build_prompt(ratios, areas, building))
+               building: BuildingParams | None, views: dict | None = None) -> Decision:
+        """views: view_id -> (image, mask). Up to [decision] max_images of them are shown to the model."""
+        prompt = build_prompt(ratios, areas, building)
+        ids = pick_views(ratios, views, config.get("decision", "max_images")) if views else []
+        images = [view_jpeg(*views[v]) for v in ids]
+        if ids:
+            prompt += "\n\n" + IMAGES_NOTE.format(n=len(ids), ids=", ".join(map(str, ids)))
+        self.last_images = images
+        answer = self.ask(prompt, images)
         return Decision(
             damage_category=answer.damage_category,
             condition_category=answer.condition_category,

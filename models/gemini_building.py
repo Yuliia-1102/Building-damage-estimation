@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from core import building as geom
 from core import cache, config
+from core.imageio import building_box
 from core.types import BuildingParams
 from models.gemini_client import GeminiJSON
 
@@ -55,6 +56,8 @@ The photo shows a damaged building (the largest building in the frame).
 
 
 def _jpeg(image: np.ndarray, max_side: int = 1024) -> bytes:
+    """Longer side scaled to max_side, aspect ratio kept, no padding: padding would spend the model's image
+    resolution on black instead of on the building."""
     im = Image.fromarray(image)
     im.thumbnail((max_side, max_side))
     buf = io.BytesIO()
@@ -80,12 +83,15 @@ class GeminiBuildingEstimator:
         attempts = config.get("geometry", "floor_frame_attempts")
         tried = []
         for i in geom.frames_for_floors(masks)[:attempts]:
-            answer = self.ask(images[i])
+            # crop to the building first: in a wide frame or a panorama the building is a small part of the
+            # pixels, and after scaling to 1024 px a floor would be only a few pixels high
+            top, bottom, left, right = building_box(masks[i])
+            answer = self.ask(images[i][top:bottom, left:right])
             log.info("building answer for frame %d: %s", i, answer)
             tried.append(i)
             if answer.floors is not None or answer.reference_object != "none":
                 break
-        p = params_from_answer(answer, masks[i])
+        p = params_from_answer(answer, masks[i], crop_height=bottom - top)
         p.source_frame = i
         if len(tried) > 1:
             p.assumptions.append(f"floors read on frame {i + 1}; not readable on frame(s) "
@@ -93,8 +99,9 @@ class GeminiBuildingEstimator:
         return p
 
 
-def params_from_answer(answer: BuildingResponse, mask: np.ndarray) -> BuildingParams:
-    """Code part of the estimate: height, scale, width, depth, roof coefficient, consequence class."""
+def params_from_answer(answer: BuildingResponse, mask: np.ndarray, crop_height: int | None = None) -> BuildingParams:
+    """Code part of the estimate: height, scale, width, depth, roof coefficient, consequence class.
+    crop_height: height in pixels of the (cropped) image the model saw, for the reference object's box."""
     floor_h = config.get("geometry", "default_floor_height_m")
     roof_coef = config.get("geometry", "roof_shape_coef_pitched" if answer.roof_type == "pitched"
                            else "roof_shape_coef_flat")
@@ -118,7 +125,7 @@ def params_from_answer(answer: BuildingResponse, mask: np.ndarray) -> BuildingPa
     elif answer.reference_object != "none" and answer.reference_box and len(answer.reference_box) == 4:
         ref_m = config.get("geometry", "reference_heights_m")[answer.reference_object]
         ymin, _, ymax, _ = answer.reference_box
-        ref_px = (ymax - ymin) / 1000 * mask.shape[0]
+        ref_px = (ymax - ymin) / 1000 * (crop_height or mask.shape[0])
         p.height_override_m = geom.height_from_reference(mask, ref_m, ref_px)
         p.height_source = f"reference object: {answer.reference_object} ({ref_m} m)"
         p.auto_detected.add("height_override_m")
