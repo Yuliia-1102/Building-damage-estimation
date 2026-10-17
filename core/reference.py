@@ -60,18 +60,40 @@ class WorkType:
     name: str
     unit: str = "m2"
     # Works in the same group are alternatives for the same area (by severity): at most one is chosen,
-    # otherwise the same square metres would be paid for twice. None = can be added on top (finishing).
+    # otherwise the same square metres would be paid for twice. None = an additional work added on top.
     group: str | None = None
+    roof_type: str | None = None      # "pitched" or "flat": the work only applies to that kind of roof
 
 
 WORK_TYPES = [
-    WorkType("facade_plaster_repair", Cls.DAMAGED_FACADE, "Facade plaster repair", group="facade_repair"),
-    WorkType("facade_masonry_repair", Cls.DAMAGED_FACADE, "Masonry wall repair", group="facade_repair"),
-    WorkType("facade_painting", Cls.DAMAGED_FACADE, "Facade painting"),
-    WorkType("window_glazing_replacement", Cls.BROKEN_WINDOW, "Glazing replacement", group="window"),
-    WorkType("window_unit_replacement", Cls.BROKEN_WINDOW, "Window unit replacement", group="window"),
-    WorkType("roof_covering_repair", Cls.DAMAGED_ROOF, "Roof covering repair", group="roof"),
-    WorkType("roof_covering_replacement", Cls.DAMAGED_ROOF, "Roof covering replacement", group="roof"),
+    # damaged facade: one repair by severity, plus additional works
+    WorkType("facade_plaster_repair", Cls.DAMAGED_FACADE, "Facade plaster repair (surface damage)",
+             group="facade_repair"),
+    WorkType("facade_etics_repair", Cls.DAMAGED_FACADE, "Insulated facade restoration (mineral wool, mesh, "
+             "decorative plaster), for facades with external insulation", group="facade_repair"),
+    WorkType("facade_masonry_repair", Cls.DAMAGED_FACADE, "Masonry wall rebuilding (holes, destroyed walls)",
+             group="facade_repair"),
+    WorkType("facade_painting", Cls.DAMAGED_FACADE, "Facade painting (finishing after plaster or masonry repair)"),
+    WorkType("facade_debris_removal", Cls.DAMAGED_FACADE, "Dismantling of destroyed structures and debris removal "
+             "(holes, collapsed or burnt parts)"),
+    WorkType("facade_scaffolding", Cls.DAMAGED_FACADE, "Facade scaffolding (any facade work above the ground floor)"),
+    # broken windows: one of three
+    WorkType("window_glazing_replacement", Cls.BROKEN_WINDOW, "Glazing replacement (frames intact)", group="window"),
+    WorkType("window_unit_replacement", Cls.BROKEN_WINDOW, "Window unit replacement (frames destroyed)",
+             group="window"),
+    WorkType("window_temporary_closure", Cls.BROKEN_WINDOW, "Temporary closure of openings with OSB boards and film "
+             "(building to be dismantled or awaiting major repair)", group="window"),
+    # damaged roof: one covering work matching the roof type, plus the roof structure for pitched roofs
+    WorkType("roof_covering_repair", Cls.DAMAGED_ROOF, "Pitched roof covering repair (metal tile, local)",
+             group="roof", roof_type="pitched"),
+    WorkType("roof_covering_replacement", Cls.DAMAGED_ROOF, "Pitched roof covering replacement (metal tile, "
+             "membrane, battens)", group="roof", roof_type="pitched"),
+    WorkType("flat_roof_repair", Cls.DAMAGED_ROOF, "Flat roof repair (one layer of torch-on roofing)",
+             group="roof", roof_type="flat"),
+    WorkType("flat_roof_replacement", Cls.DAMAGED_ROOF, "Flat roof replacement (old covering removed, two layers "
+             "of torch-on roofing)", group="roof", roof_type="flat"),
+    WorkType("roof_structure_repair", Cls.DAMAGED_ROOF, "Rafter structure repair (burnt or collapsed pitched roof)",
+             roof_type="pitched"),
 ]
 
 WORK_TYPES_BY_CODE = {w.code: w for w in WORK_TYPES}
@@ -86,12 +108,19 @@ DAMAGE_RECOMMENDATION_UA = {"I": "поточний та/або капіталь�
                             "III": "невідкладний демонтаж"}
 WORK_NAMES_UA = {
     "facade_plaster_repair": "Ремонт штукатурки фасаду",
+    "facade_etics_repair": "Відновлення утепленого фасаду",
     "facade_masonry_repair": "Відновлення кладки стін",
     "facade_painting": "Фарбування фасаду",
+    "facade_debris_removal": "Розбирання зруйнованих конструкцій і вивезення сміття",
+    "facade_scaffolding": "Риштування фасадне",
     "window_glazing_replacement": "Заміна скління",
     "window_unit_replacement": "Заміна віконних блоків",
-    "roof_covering_repair": "Ремонт покрівлі",
-    "roof_covering_replacement": "Заміна покрівлі",
+    "window_temporary_closure": "Тимчасове закриття віконних прорізів (OSB)",
+    "roof_covering_repair": "Ремонт скатної покрівлі",
+    "roof_covering_replacement": "Заміна скатної покрівлі",
+    "flat_roof_repair": "Ремонт плаского даху",
+    "flat_roof_replacement": "Заміна покрівлі плаского даху",
+    "roof_structure_repair": "Відновлення кроквяної системи",
 }
 STRUCTURE_NAMES_UA = {"brick": "цегляна", "large_panel": "великопанельна", "monolithic_frame": "монолітний каркас",
                       "precast_frame": "збірний залізобетонний каркас", "steel_frame": "металевий каркас",

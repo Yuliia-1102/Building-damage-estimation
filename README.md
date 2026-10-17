@@ -89,8 +89,10 @@ ordering inspections: confirmed, preliminary, insufficient data.
 the scale error and the number of views. Prices come from a `PriceSource` chosen in `config.toml`
 `[prices] source`:
 - `db` (default): the materials database (`pricedb/`, epic 5), SQLite at `data/materials.db`, created and
-  seeded on first use (or `uv run python scripts/init_db.py`). It has no labour rates yet, so the
-  estimate covers materials only and the report says so.
+  seeded on first use (or `uv run python scripts/init_db.py`). 14 work types (`core/reference.py`), 35
+  materials with a bill of quantities per m2 of work, and labour rates per m2, each price with its source
+  and date (`pricedb/seed_data.py`). Roof works exist for pitched and flat roofs; the code swaps them to
+  match the detected roof type.
 - `csv`: `resources/prices_sample/` - sample numbers with labour rates, not real prices.
 
 Prices have dates and are never overwritten. `scripts/show_prices.py` prints what the source returns.

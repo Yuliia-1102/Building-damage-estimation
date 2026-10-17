@@ -38,3 +38,20 @@ def escalation_level(confidence: float, high: float | None = None, low: float | 
     if confidence >= low:
         return "preliminary"
     return "insufficient_data"
+
+
+def match_roof_type(codes: list[str], roof_type: str | None) -> list[str]:
+    """Roof works exist for pitched and for flat roofs. When the roof type is known, a work for the other kind
+    is swapped for its counterpart (or dropped if it has none), so the materials and prices fit the roof."""
+    if roof_type not in ("pitched", "flat"):
+        return codes
+    counterpart = {"roof_covering_repair": "flat_roof_repair", "roof_covering_replacement": "flat_roof_replacement"}
+    counterpart.update({v: k for k, v in counterpart.items()})
+    out = []
+    for code in codes:
+        wt = WORK_TYPES_BY_CODE[code]
+        if wt.roof_type in (None, roof_type):
+            out.append(code)
+        elif code in counterpart:
+            out.append(counterpart[code])
+    return list(dict.fromkeys(out))

@@ -60,8 +60,11 @@ class StubDecisionLayer:
 
         damaged = {"damaged_facade": ratios.damaged_facade, "broken_window": ratios.broken_window,
                    "damaged_roof": ratios.damaged_roof}
+        roof = getattr(building, "roof_type", None) or "flat"
         codes, groups = [], set()
-        for w in WORK_TYPES:             # first alternative of each group, plus finishing works
+        for w in WORK_TYPES:             # first alternative of each group, plus additional works
+            if w.roof_type not in (None, roof):
+                continue
             if damaged[w.damage_class.name.lower()] and (w.group is None or w.group not in groups):
                 codes.append(w.code)
                 groups.add(w.group)

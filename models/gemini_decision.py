@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from core.decision import escalation_level, works_with_quantities
+from core.decision import escalation_level, match_roof_type, works_with_quantities
 from core.reference import (CONDITION_CATEGORIES, DAMAGE_CATEGORIES, WORK_TYPES, WORK_TYPES_BY_CODE,
                             roof_covering_category)
 from core.types import BuildingParams, CombinedRatios, DamagedAreas, Decision
@@ -57,7 +57,8 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
                              for k, (name, desc, pct, _) in DAMAGE_CATEGORIES.items())
     condition_scale = "\n".join(f"  {k} - {name}: {desc}" for k, (name, desc) in CONDITION_CATEGORIES.items())
     works = "\n".join(f"  {w.code}  (repairs {w.damage_class.name.lower()}"
-                      f"{', alternatives group ' + w.group if w.group else ', finishing, can be added'}): {w.name}"
+                      f"{', alternatives group ' + w.group if w.group else ', additional work, can be added'}"
+                      f"{', ' + w.roof_type + ' roofs only' if w.roof_type else ''}): {w.name}"
                       for w in WORK_TYPES)
     roof_cat = roof_covering_category(ratios.damaged_roof)
 
@@ -88,7 +89,8 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
     if building is not None:
         lines += ["", "Building:",
                   f"  floors: {building.floors or 'unknown'}",
-                  f"  structure type: {building.structure_type or 'unknown'}"]
+                  f"  structure type: {building.structure_type or 'unknown'}",
+                  f"  roof type: {building.roof_type or 'unknown'}"]
     if areas is not None:
         lines.append(f"  areas: walls {_m2(areas.wall_area_m2)}, roof {_m2(areas.roof_area_m2)}; "
                      f"damaged facade {_m2(areas.damaged_facade_m2)}, broken windows "
@@ -113,7 +115,11 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
         "assessed: do not add works for it.",
         "- Works in the same alternatives group repair the same area in different ways: choose at most ONE per "
         "group, the one matching the severity (e.g. masonry repair for destroyed walls, plaster repair for "
-        "surface damage). Finishing works can be added on top.",
+        "surface damage). Additional works can be added on top.",
+        "- Roof works marked 'pitched roofs only' or 'flat roofs only' must match the roof type of the building.",
+        "- Facade scaffolding is needed for facade works on buildings above one floor. Debris removal is needed "
+        "when walls are holed, collapsed or burnt through.",
+        "- For a building in damage category III do not restore windows; close the openings temporarily.",
         "- confidence: low when few views were assessed, a surface is not visible, or the measurements are "
         "borderline between two categories; high only when the category is clear. Load-bearing structures "
         "cannot be seen in photos, so be cautious with categories II-III and 3-4.",
@@ -135,7 +141,7 @@ class GeminiDecisionLayer:
             damage_category=answer.damage_category,
             condition_category=answer.condition_category,
             confidence=answer.confidence,
-            works=works_with_quantities(answer.work_types, areas),
+            works=works_with_quantities(match_roof_type(answer.work_types, building and building.roof_type), areas),
             escalation=escalation_level(answer.confidence),
             roof_covering_category=roof_covering_category(ratios.damaged_roof),
         )

@@ -127,3 +127,11 @@ def test_two_alternative_repairs_of_same_area_are_rejected():
     client = FakeClient(double, GOOD)
     d = GeminiDecisionLayer(client=client, model="fake").decide(RATIOS, AREAS, None)
     assert client.calls == 2 and [w.work_type for w in d.works] == ["facade_masonry_repair", "window_unit_replacement"]
+
+
+def test_roof_works_follow_the_roof_type():
+    from core.decision import match_roof_type
+    codes = ["roof_covering_replacement", "roof_structure_repair", "facade_painting"]
+    assert match_roof_type(codes, "flat") == ["flat_roof_replacement", "facade_painting"]
+    assert match_roof_type(["flat_roof_repair"], "pitched") == ["roof_covering_repair"]
+    assert match_roof_type(codes, None) == codes

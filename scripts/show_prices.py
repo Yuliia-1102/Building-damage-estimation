@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import config  # noqa: E402
 from core.reference import WORK_TYPES_BY_CODE  # noqa: E402
 from pricedb import (  # noqa: E402
-    MaterialsDbPriceSource, get_engine, session_factory, sqlite_url,
+    MaterialsDbPriceSource, open_db,
 )
 
 AS_OF = date.today()
@@ -52,11 +52,7 @@ def show(src, code: str) -> None:
 
 def main() -> None:
     db_path = config.path("materials_db")
-    if not db_path.exists():
-        print(f"No database at {db_path}. Run: python scripts/init_db.py")
-        return
-    engine = get_engine(sqlite_url(db_path))
-    with session_factory(engine)() as session:
+    with open_db(db_path)() as session:          # created and seeded if missing
         src = MaterialsDbPriceSource(session)
         codes = sys.argv[1:] or list(WORK_TYPES_BY_CODE)
         for code in codes:

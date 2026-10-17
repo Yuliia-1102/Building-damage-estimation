@@ -25,6 +25,8 @@ def load_seed(session: Session) -> None:
     }
 
     for name, material in materials.items():
+        if name not in seed_data.PRICES:          # added later: first price comes from PRICE_REVISIONS
+            continue
         if session.scalar(select(Price).where(
                 Price.material_id == material.id,
                 Price.valid_from == seed_data.PRICE_DATE)) is None:
