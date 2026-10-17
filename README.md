@@ -38,7 +38,9 @@ turns them on (needs `GEMINI_API_KEY` in `.env`). While it is off, no request is
 before shows its cached Gemini answers, any other case gets fixed stub answers, and the report says which.
 The same rule holds for `cli.py` and `tools/run_testset.py`: requests only with `--gemini`.
 
-Materials and prices are edited on the separate «Materials admin» page in the sidebar.
+Materials and prices are edited on the separate «Ціни і матеріали» page in the sidebar.
+
+Demo video script: `docs/demo_scenario.md`.
 
 ## Run from the command line
 
