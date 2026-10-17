@@ -14,6 +14,7 @@ from core import config
 from core.imageio import LEGEND, overlay
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA, DISCLAIMER_UA,
                             ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
+from core.summary import summary_points
 from core.types import Report
 
 FONT_DIR = config.ROOT / "resources" / "fonts"
@@ -62,8 +63,12 @@ class _PDF(FPDF):
         self.cell(0, 5, f"Сторінка {self.page_no()}", align="C")
 
 
+TABLE_FILL = (246, 242, 235)
+
+
 def _table(pdf: FPDF, rows: list[list[str]], widths: list[float], header: bool = True):
     pdf.set_font("dejavu", "", 9)
+    pdf.set_fill_color(*TABLE_FILL)
     with pdf.table(col_widths=widths, text_align="LEFT", first_row_as_headings=header,
                    line_height=5.5) as t:
         for r in rows:
@@ -85,6 +90,56 @@ def _p(pdf: FPDF, text: str):
     pdf.ln(1)
 
 
+def _sub(pdf: FPDF, text: str):
+    pdf.set_font("dejavu", "B", 10)
+    pdf.cell(0, 6, text, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("dejavu", "", 10)
+
+
+def _kv(pdf: FPDF, rows: list[tuple[str, str]], widths=(70, 110)):
+    """Two columns, no header: label and value."""
+    pdf.set_font("dejavu", "", 9)
+    pdf.set_fill_color(*TABLE_FILL)
+    with pdf.table(col_widths=widths, text_align="LEFT", first_row_as_headings=False, line_height=5.5) as t:
+        for label, value in rows:
+            row = t.row()
+            pdf.set_font("dejavu", "B", 9)
+            row.cell(label)
+            pdf.set_font("dejavu", "", 9)
+            row.cell(value)
+    pdf.ln(3)
+
+
+def _bullets(pdf: FPDF, points: list[str]):
+    """One point per line; the words before the first colon are bold."""
+    for text in points:
+        label, sep, rest = text.partition(": ")
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font("dejavu", "", 10)
+        pdf.cell(5, 5, "•")
+        body = f"**{label}:** {rest}" if sep else text
+        pdf.multi_cell(0, 5, body, markdown=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(0.8)
+    pdf.ln(1.5)
+
+
+def _legend(pdf: FPDF):
+    """One line per class: a colour swatch and its name."""
+    pdf.set_font("dejavu", "", 9)
+    for name, rgb in LEGEND.items():
+        if name == "background":
+            continue
+        y = pdf.get_y()
+        pdf.set_fill_color(*rgb)
+        pdf.rect(pdf.l_margin, y + 0.8, 8, 3.6, style="F")
+        pdf.set_x(pdf.l_margin + 10)
+        pdf.cell(0, 5.2, f"{LEGEND_UA[name]} — {COLOR_NAMES_UA[name]}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+
+
+HEIGHT_SOURCE_UA = {"floors": "за кількістю поверхів", "user": "введено користувачем"}
+
+
 def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> bytes:
     pdf = _PDF(format="A4")
     pdf.add_font("dejavu", "", str(FONT_DIR / "DejaVuSans.ttf"))
@@ -95,8 +150,8 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     pdf.set_font("dejavu", "B", 16)
     pdf.cell(0, 10, "Звіт попередньої оцінки пошкоджень", new_x="LMARGIN", new_y="NEXT")
     mode = {"photo": "одне фото", "photos": "набір фото", "video": "відео"}.get(report.mode, report.mode)
-    _p(pdf, f"Об'єкт: {report.case_id}   Дата: {date.today():%d.%m.%Y}   Вхідні дані: {mode}   "
-            f"Оцінено різних видів: {report.views_assessed}")
+    _kv(pdf, [("Об'єкт", report.case_id), ("Дата", f"{date.today():%d.%m.%Y}"), ("Вхідні дані", mode),
+              ("Оцінено різних видів", str(report.views_assessed))], widths=(50, 130))
     pdf.set_fill_color(255, 243, 205)
     pdf.set_font("dejavu", "", 9)
     pdf.multi_cell(0, 5, DISCLAIMER_UA, fill=True, new_x="LMARGIN", new_y="NEXT")
@@ -105,8 +160,8 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     # 1. Views
     if images:
         _h(pdf, "1. Будівля і маски пошкоджень")
-        _p(pdf, "Кольори: " + ", ".join(f"{LEGEND_UA[name]} — {COLOR_NAMES_UA[name]}"
-                                        for name in LEGEND if name != "background") + ".")
+        _sub(pdf, "Кольори масок")
+        _legend(pdf)
         # two views per row, 88 mm wide each
         shown = [(v, im) for v, im in list(images.items())[:6] if report.masks.get(v) is not None]
         for row in range(0, len(shown), 2):
@@ -140,7 +195,7 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         _table(pdf, [
             ["Параметр", "Значення", "Джерело"],
             ["Кількість поверхів", _num(b.floors and float(b.floors)).replace(".0", ""), auto("floors")],
-            ["Висота", _num(b.height_m, " м"), b.height_source or ""],
+            ["Висота", _num(b.height_m, " м"), HEIGHT_SOURCE_UA.get(b.height_source or "", b.height_source or "")],
             ["Ширина", _num(b.width_m, " м"), auto("width_m")],
             ["Глибина", _num(b.depth_m, " м"), auto("depth_m")],
             ["Тип конструкції", STRUCTURE_NAMES_UA.get(b.structure_type or "unknown", "невідомо"),
@@ -151,7 +206,8 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
              "ДБН В.1.2-14:2018, табл. 1"],
         ], widths=[60, 60, 60])
         if b.assumptions:
-            _p(pdf, "Припущення: " + "; ".join(assumption_ua(a) for a in b.assumptions) + ".")
+            _sub(pdf, "Припущення")
+            _bullets(pdf, [assumption_ua(a) for a in b.assumptions])
 
     # 3. Damage measurements
     _h(pdf, "3. Виміряні пошкодження")
@@ -165,15 +221,19 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         ["Пошкодження даху", _pct(r.damaged_roof), _pct(r.worst_roof_damage),
          _num(a.damaged_roof_m2 if a else None, " м²")],
     ], widths=[50, 45, 40, 45])
+    extra = []
     if r.worst_section_damage is not None:
-        _p(pdf, f"Найгірша вертикальна секція фасаду (третина ширини, вид {r.worst_section_view}): "
-                f"{_pct(r.worst_section_damage)} пошкоджено.")
+        extra.append(("Найгірша секція фасаду", f"{_pct(r.worst_section_damage)} (третина ширини фасаду, "
+                                                  f"вид {r.worst_section_view})"))
     if r.damage_by_third:
         low, mid, up = r.damage_by_third
-        _p(pdf, f"Розподіл пошкоджень фасаду по висоті: нижня третина {low:.0%}, середня {mid:.0%}, "
-                f"верхня {up:.0%}.")
+        extra.append(("Пошкодження по висоті", f"нижня третина {low:.0%} · середня {mid:.0%} · верхня {up:.0%}"))
     if a:
-        _p(pdf, f"Площа стін {_num(a.wall_area_m2, ' м²')}, площа даху {_num(a.roof_area_m2, ' м²')}.")
+        extra.append(("Площа стін / даху", f"{_num(a.wall_area_m2, ' м²')} / {_num(a.roof_area_m2, ' м²')}"))
+    if r.roof_partly_seen:
+        extra.append(("Дах", "видно лише смугою, оцінка приблизна"))
+    if extra:
+        _kv(pdf, extra)
 
     # 4. Conclusion
     _h(pdf, "4. Висновок")
@@ -195,7 +255,11 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
              "—" if d.roof_covering_category is None else str(d.roof_covering_category), "ДСТУ 9273:2024, табл. В.7.1"],
             ["Впевненість", f"{d.confidence:.2f}", ""],
         ], widths=[60, 75, 45])
-        _p(pdf, ESCALATION_UA[d.escalation])
+        pdf.set_font("dejavu", "B", 10)
+        pdf.multi_cell(0, 5, ESCALATION_UA[d.escalation], new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+    _sub(pdf, "Висновок словами")
+    _bullets(pdf, summary_points(report))
 
     # 5. Works and cost
     _h(pdf, "5. Перелік робіт і орієнтовна вартість")
@@ -211,15 +275,19 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         pdf.set_font("dejavu", "B", 11)
         pdf.multi_cell(0, 6, f"Орієнтовна вартість: від {_uah(k.low)} до {_uah(k.high)}", new_x="LMARGIN",
                        new_y="NEXT")
+        notes = []
         if k.price_source:
-            _p(pdf, f"Джерело цін: {k.price_source}.")
-        _p(pdf, f"Ціни станом на {k.as_of}. Діапазон враховує похибку масштабу і кількість оцінених видів: "
-                f"чим менше видів, тим ширший діапазон.")
+            notes.append(f"Джерело цін: {k.price_source}, ціни станом на {k.as_of}.")
+        notes.append(f"Діапазон: враховує похибку масштабу і кількість оцінених видів ({report.views_assessed}); "
+                     f"що менше видів, то ширший діапазон.")
         if k.skipped_works:
-            _p(pdf, "Не враховано: " + "; ".join(k.skipped_works) + ".")
+            notes.append("Не враховано: " + "; ".join(k.skipped_works) + ".")
+        _bullets(pdf, notes)
 
     _h(pdf, "Джерела")
-    _p(pdf, "ДСТУ 9273:2024 «Настанова щодо обстеження будівель і споруд для визначення та оцінювання їхнього "
-            "технічного стану»; Методика проведення обстеження та оформлення його результатів, наказ "
-            "Мінрозвитку № 144 від 06.08.2022; ДБН В.1.2-14:2018.")
+    _bullets(pdf, ["ДСТУ 9273:2024 «Настанова щодо обстеження будівель і споруд для визначення та оцінювання їхнього "
+                   "технічного стану» — категорії технічного стану.",
+                   "Методика проведення обстеження та оформлення його результатів, наказ Мінрозвитку № 144 від "
+                   "06.08.2022 — категорії пошкоджень.",
+                   "ДБН В.1.2-14:2018 — класи наслідків."])
     return bytes(pdf.output())

@@ -24,6 +24,9 @@ facade_sections = 3
 # Placeholder, tuned on the test set in task 9.5.
 min_facade_share = 0.05
 min_roof_share = 0.05
+# When no view shows this much roof, views with at least this much are used and the roof is marked as seen
+# only partly (a drone orbit at roof level sees a strip of roof).
+min_roof_share_fallback = 0.01
 
 [geometry]
 default_floor_height_m = 3.0    # plan.txt, section 4

@@ -83,7 +83,8 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
         "Measurements (share of the VISIBLE surface that is damaged, over all usable views):",
         f"  damaged facade: {_pct(ratios.damaged_facade)}  (from {ratios.facade_views} views)",
         f"  broken windows: {_pct(ratios.broken_window)}  (from {ratios.facade_views} views)",
-        f"  damaged roof:   {_pct(ratios.damaged_roof)}  (from {ratios.roof_views} views)",
+        f"  damaged roof:   {_pct(ratios.damaged_roof)}  (from {ratios.roof_views} views"
+        f"{', only a strip of roof visible in them' if ratios.roof_partly_seen else ''})",
     ]
     if ratios.worst_facade_damage is not None:
         lines.append(f"  worst single view of the facade: {_pct(ratios.worst_facade_damage)} damaged "

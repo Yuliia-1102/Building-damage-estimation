@@ -31,6 +31,7 @@ from core.imageio import LEGEND, overlay  # noqa: E402
 from core.pipeline import evaluate, segment_case  # noqa: E402
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA,  # noqa: E402
                             DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
+from core.summary import summary_points  # noqa: E402
 from core.report_pdf import COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf  # noqa: E402
 
 st.set_page_config(page_title="Оцінка пошкоджень будівлі", page_icon="🏚️", layout="wide")
@@ -336,7 +337,8 @@ def damage_section(report):
                 help="Третина ширини фасаду з найбільшою часткою пошкоджень в одному виді: показує зруйновану "
                      "секцію, яку середнє по фасаду розмиває (ДСТУ 9273, п. 5.3)")
     c[2].metric("Вікна пошкоджено", pct(r.broken_window))
-    c[3].metric("Дах пошкоджено", pct(r.damaged_roof))
+    c[3].metric("Дах пошкоджено", pct(r.damaged_roof),
+                help="Дах видно лише смугою, оцінка приблизна" if r.roof_partly_seen else None)
     rows = [
         {"Поверхня": "Пошкодження фасаду", "Частка": pct(r.damaged_facade), "Найгірший вид": pct(r.worst_facade_damage),
          "Площа, м²": round(a.damaged_facade_m2) if a and a.damaged_facade_m2 else None},
@@ -384,6 +386,13 @@ def conclusion_section(report):
         with c3:
             st.metric("Впевненість", f"{d.confidence:.2f}")
         (st.success if d.escalation == "confirmed" else st.warning)(ESCALATION_UA[d.escalation])
+    with st.container(border=True):
+        st.markdown("**Висновок словами**")
+        lines = []
+        for text in summary_points(report):
+            label, sep, rest = text.partition(": ")
+            lines.append(f"- **{label}:** {rest}" if sep else f"- {text}")
+        st.markdown("\n".join(lines))
 
 
 def cost_section(report):

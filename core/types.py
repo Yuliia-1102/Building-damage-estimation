@@ -77,6 +77,7 @@ class CombinedRatios:
     # is diluted in the whole-view share (ДСТУ 9273, 5.3: the worst part decides).
     worst_section_view: int | None = None
     worst_section_damage: float | None = None
+    roof_partly_seen: bool = False    # roof ratios come from views where only a strip of roof is visible
 
 
 # ---------- building parameters (epic 4) ----------

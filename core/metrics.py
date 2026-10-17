@@ -102,6 +102,10 @@ def combine(frames: list[FrameMetrics]) -> CombinedRatios:
     """
     facade = [f for f in frames if f.facade_usable]
     roof = [f for f in frames if f.roof_usable]
+    partly = False
+    if not roof:            # no view shows much roof: use the strips of roof that are visible
+        roof = [f for f in frames if f.roof_share >= config.get("suitability", "min_roof_share_fallback")]
+        partly = bool(roof)
 
     facade_den = sum(f.facade_px for f in facade)
     roof_den = sum(f.roof_px for f in roof)
@@ -131,4 +135,5 @@ def combine(frames: list[FrameMetrics]) -> CombinedRatios:
         damage_by_third=[t / total for t in thirds] if total else None,
         worst_section_view=worst_sec.view_id if worst_sec else None,
         worst_section_damage=worst_sec.worst_section if worst_sec else None,
+        roof_partly_seen=partly,
     )
