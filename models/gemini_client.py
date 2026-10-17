@@ -3,10 +3,12 @@
 Used by the decision layer and by the building parameters estimator, so both get the same
 schema validation (task 6.1), retry on a malformed answer (6.1.3) and answer cache (6.2.3).
 """
+import csv
 import json
 import logging
 import os
 import time
+from datetime import datetime
 
 from pydantic import BaseModel, ValidationError
 
@@ -58,7 +60,25 @@ class GeminiJSON:
                 seed=config.get("decision", "seed"),
             ),
         )
+        self._log_usage(schema.__name__, getattr(response, "usage_metadata", None))
         return response.text
+
+    def _log_usage(self, what: str, usage) -> None:
+        """One row per paid request in output/gemini_usage.csv: what was asked and how many tokens it took."""
+        if usage is None:
+            return
+        row = {"time": datetime.now().isoformat(timespec="seconds"), "model": self.model, "request": what,
+               "input": usage.prompt_token_count or 0, "output": usage.candidates_token_count or 0,
+               "thinking": usage.thoughts_token_count or 0}
+        log.info("Gemini usage: %s", row)
+        path = config.path("output") / "gemini_usage.csv"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        new = not path.exists()
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=list(row))
+            if new:
+                w.writeheader()
+            w.writerow(row)
 
     def ask(self, contents: list, schema: type[BaseModel], system: str, namespace: str, key_parts: list[str]):
         """contents: text and image parts for the request. key_parts: what identifies the request in the cache
