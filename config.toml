@@ -41,8 +41,10 @@ low = 0.45
 
 [video]
 frame_interval_s = 1.0  # task 8.1
-blur_threshold = 100.0  # variance of Laplacian, task 8.2
+blur_threshold = 100.0  # variance of Laplacian, task 8.2; placeholder, tuned on test clips
+duplicate_similarity = 0.97   # cosine similarity above which two frames count as the same view
 views_k = 5             # task 8.4, between 4 and 6
+embedding_model = "vit_small_patch14_reg4_dinov2.lvd142m"   # timm, cached from Hugging Face
 
 [prices]
 max_candidates = 10     # task 5.5

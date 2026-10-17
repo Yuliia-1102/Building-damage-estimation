@@ -90,7 +90,7 @@ def to_json(r: Report) -> str:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("input", type=Path, help="case folder or a single image")
+    p.add_argument("input", type=Path, help="case folder, a single image, or a video")
     src = p.add_mutually_exclusive_group()
     src.add_argument("--masks", type=Path, help="folder with ready-made masks instead of the model")
     src.add_argument("--stub", action="store_true", help="fake segmentation, no weights needed")
@@ -128,7 +128,16 @@ def main() -> None:
         decision_layer = StubDecisionLayer()
         building_estimator = StubBuildingParams()
 
-    seg = segment_case(case_from_folder(args.input), segmenter)
+    from core.video import VIDEO_EXTS
+    if args.input.suffix.lower() in VIDEO_EXTS:
+        from core.case import case_from_video
+        from models.dino_embedder import DinoEmbedder
+        case, info = case_from_video(args.input, config.path("cases") / "_video", DinoEmbedder())
+        print(f"Video: {info['extracted']} frames, {info['blurred']} blurred, "
+              f"{info['near_duplicates']} near-duplicates, {info['selected']} views selected")
+    else:
+        case = case_from_folder(args.input)
+    seg = segment_case(case, segmenter)
     if args.save:
         save_views(seg, args.save)
     prices = CsvPriceSource()
