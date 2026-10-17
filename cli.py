@@ -155,7 +155,7 @@ def main() -> None:
         from models.gemini_building import recompute
         masks = [seg.masks[f.view_id] for f in seg.frames]
         report.building.floors = args.floors
-        building = recompute(report.building, masks[best_frame_for_floors(masks)], {"floors"})
+        building = recompute(report.building, masks[report.building.source_frame if report.building.source_frame is not None else best_frame_for_floors(masks)], {"floors"})
         report = evaluate(seg, building=building, decision_layer=decision_layer, price_source=prices)
     if args.json:
         print(to_json(report))

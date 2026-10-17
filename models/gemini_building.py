@@ -75,11 +75,22 @@ class GeminiBuildingEstimator:
                             [PROMPT, cache.text_key(data.hex())])
 
     def estimate(self, images: list[np.ndarray], masks: list[np.ndarray]) -> BuildingParams:
-        i = geom.best_frame_for_floors(masks)
-        image, mask = images[i], masks[i]
-        answer = self.ask(image)
-        log.info("building answer for frame %d: %s", i, answer)
-        return params_from_answer(answer, mask)
+        """Asks about the frame with the most facade; if neither the floors nor a reference object can be
+        read on it, asks about the next frames, up to [geometry] floor_frame_attempts in all."""
+        attempts = config.get("geometry", "floor_frame_attempts")
+        tried = []
+        for i in geom.frames_for_floors(masks)[:attempts]:
+            answer = self.ask(images[i])
+            log.info("building answer for frame %d: %s", i, answer)
+            tried.append(i)
+            if answer.floors is not None or answer.reference_object != "none":
+                break
+        p = params_from_answer(answer, masks[i])
+        p.source_frame = i
+        if len(tried) > 1:
+            p.assumptions.append(f"floors read on frame {i + 1}; not readable on frame(s) "
+                                 f"{', '.join(str(t + 1) for t in tried[:-1])}")
+        return p
 
 
 def params_from_answer(answer: BuildingResponse, mask: np.ndarray) -> BuildingParams:

@@ -30,6 +30,7 @@ default_floor_height_m = 3.0    # plan.txt, section 4
 roof_shape_coef_pitched = 1.15  # plan.txt, section 5
 roof_shape_coef_flat = 1.0
 # Building measured from the mask: column heights / row widths at this percentile, robust to occlusion.
+floor_frame_attempts = 3       # frames shown to the model until the floors can be read (1 request each)
 mask_extent_percentile = 95
 # Reference objects for the height fallback (plan.txt, section 4), metres.
 reference_heights_m = { door = 2.1, car = 1.5, person = 1.7 }

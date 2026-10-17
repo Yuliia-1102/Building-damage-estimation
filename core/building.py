@@ -30,9 +30,14 @@ def facade_extent_px(mask: np.ndarray, percentile: float | None = None) -> tuple
     return float(np.percentile(cols, percentile)), float(np.percentile(rows, percentile))
 
 
+def frames_for_floors(masks: list[np.ndarray]) -> list[int]:
+    """Frame indices, the one showing the most facade first: floors are counted on it (task 4.2.2).
+    The next ones are tried when the floors cannot be read on the first (a close-up of a wall, say)."""
+    return [int(i) for i in np.argsort([-np.isin(m, FACADE_CLASSES).mean() for m in masks], kind="stable")]
+
+
 def best_frame_for_floors(masks: list[np.ndarray]) -> int:
-    """Index of the frame showing the most facade: floors are counted on it (task 4.2.2)."""
-    return int(np.argmax([np.isin(m, FACADE_CLASSES).mean() for m in masks]))
+    return frames_for_floors(masks)[0]
 
 
 def width_from_height(mask: np.ndarray, height_m: float) -> tuple[float | None, float]:

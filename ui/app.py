@@ -129,7 +129,8 @@ def recalculate(changes: dict) -> None:
     for k, v in changes.items():
         setattr(building, k, v)
     masks = [seg.masks[f.view_id] for f in seg.frames]
-    building = recompute(building, masks[best_frame_for_floors(masks)], set(changes))
+    frame = building.source_frame if building.source_frame is not None else best_frame_for_floors(masks)
+    building = recompute(building, masks[frame], set(changes))
     t = time.perf_counter()
     report = evaluate(seg, building=building, decision_layer=decision_layer, price_source=get_prices())
     st.session_state.update(report=report, pdf=None, recalc_time=time.perf_counter() - t)

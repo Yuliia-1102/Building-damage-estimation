@@ -96,6 +96,7 @@ class BuildingParams:
     consequence_class: str | None = None    # "CC1" | "CC2" | "CC3", ДБН В.1.2-14:2018 table 1 (estimate)
     auto_detected: set[str] = field(default_factory=set)   # names of fields filled automatically
     assumptions: list[str] = field(default_factory=list)   # e.g. "depth assumed equal to width"
+    source_frame: int | None = None    # index of the frame the floors were read on; its mask gives the scale
 
     @property
     def height_m(self) -> float | None:

@@ -61,3 +61,19 @@ def test_user_edit_recomputes_width_and_drops_auto_flag():
     p.floors = 6
     p = recompute(p, m, {"floors"})
     assert p.width_m == pytest.approx(36) and "floors" not in p.auto_detected and p.height_source == "user"
+
+
+def test_next_frame_is_tried_when_floors_are_not_readable(monkeypatch):
+    from models import gemini_building as gb
+    est = gb.GeminiBuildingEstimator.__new__(gb.GeminiBuildingEstimator)
+    answers = iter([gb.BuildingResponse(floors=None, floors_confidence=0.1, structure_type="brick",
+                                        roof_type="flat", reference_object="none"),
+                    gb.BuildingResponse(floors=5, floors_confidence=0.9, structure_type="brick",
+                                        roof_type="flat", reference_object="none")])
+    asked = []
+    monkeypatch.setattr(est, "ask", lambda image: asked.append(image) or next(answers), raising=False)
+    big, small = np.zeros((100, 100), np.uint8), np.zeros((100, 100), np.uint8)
+    big[10:90, 10:90] = 1
+    small[40:90, 40:60] = 1
+    p = est.estimate([np.zeros((100, 100, 3), np.uint8)] * 2, [small, big])
+    assert len(asked) == 2 and p.floors == 5 and p.source_frame == 0
