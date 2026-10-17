@@ -162,6 +162,7 @@ def main() -> None:
     p.add_argument("--gemini", action="store_true",
                    help="send paid Gemini requests; without it only cached answers are used, stubs otherwise")
     p.add_argument("--only", nargs="*", help="case ids to run")
+    p.add_argument("--decision-model", help="decision model for this run instead of config.toml (comparisons)")
     p.add_argument("--no-views", action="store_true", help="do not save masks and overlays")
     args = p.parse_args()
 
@@ -208,7 +209,7 @@ def main() -> None:
         w.writeheader()
         for run in range(1, args.repeat + 1):
             if use_llm:
-                decision = GeminiDecisionLayer(use_cache=not args.no_decision_cache)
+                decision = GeminiDecisionLayer(model=args.decision_model, use_cache=not args.no_decision_cache)
             for row in rows:
                 t = time.time()
                 out = dict.fromkeys(COLUMNS, "")
@@ -269,7 +270,8 @@ def main() -> None:
     manifest = {
         "started": start.isoformat(timespec="seconds"), "finished": datetime.now().isoformat(timespec="seconds"),
         "git": git_state(), "args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
-        "models": {"building": config.get("decision", "building_model"), "decision": config.get("decision", "model")},
+        "models": {"building": config.get("decision", "building_model"),
+                   "decision": args.decision_model or config.get("decision", "model")},
         "price_source": config.get("prices", "source"), "usage": usage_totals(usage),
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
