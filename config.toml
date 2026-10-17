@@ -22,6 +22,12 @@ min_roof_share = 0.05
 default_floor_height_m = 3.0    # plan.txt, section 4
 roof_shape_coef_pitched = 1.15  # plan.txt, section 5
 roof_shape_coef_flat = 1.0
+# Building measured from the mask: column heights / row widths at this percentile, robust to occlusion.
+mask_extent_percentile = 95
+# Reference objects for the height fallback (plan.txt, section 4), metres.
+reference_heights_m = { door = 2.1, car = 1.5, person = 1.7 }
+# Rough gross floor area per occupant for the consequence class estimate. Team assumption.
+floor_area_per_person_m2 = 30.0
 
 [uncertainty]
 # Relative half-width of the range = scale_error + coverage_coef / views (task 3.6).

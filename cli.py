@@ -29,6 +29,10 @@ def _m2(x: float | None) -> str:
     return "n/a" if x is None else f"{x:.1f} m2"
 
 
+def _m(x: float | None) -> str:
+    return "n/a" if x is None else f"{x:.1f} m"
+
+
 def print_text(r: Report) -> None:
     print(f"Case {r.case_id}  mode={r.mode}  views assessed={r.views_assessed}")
     for f in r.frames:
@@ -67,8 +71,15 @@ def print_text(r: Report) -> None:
         print(f"Cost: {k.low:,.0f} - {k.high:,.0f} {k.currency} (point estimate {k.total:,.0f}, prices as of {k.as_of})")
         for w in k.skipped_works:
             print(f"  not priced: {w}")
-    if r.building and r.building.assumptions:
-        print("Assumptions: " + "; ".join(r.building.assumptions))
+    if r.building:
+        b = r.building
+        auto = lambda name: " (auto)" if name in b.auto_detected else ""
+        print(f"Building: floors {b.floors}{auto('floors')}, height {_m(b.height_m)} [{b.height_source}], "
+              f"width {_m(b.width_m)}{auto('width_m')}, depth {_m(b.depth_m)}{auto('depth_m')}, "
+              f"structure {b.structure_type}{auto('structure_type')}, roof {b.roof_type}; "
+              f"consequence class {b.consequence_class} (~{b.occupants_estimate} people, estimate)")
+        if b.assumptions:
+            print("Assumptions: " + "; ".join(b.assumptions))
 
 
 def to_json(r: Report) -> str:
@@ -88,6 +99,7 @@ def main() -> None:
     p.add_argument("--clear-cache", action="store_true", help="delete cached masks and answers first")
     p.add_argument("--json", action="store_true", help="print JSON instead of text")
     p.add_argument("--save", type=Path, help="folder to save masks and overlays to")
+    p.add_argument("--floors", type=int, help="correct the floor count; recalculates without re-segmenting")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
 
@@ -108,16 +120,27 @@ def main() -> None:
             segmenter = cache.CachedSegmenter(segmenter, model_id=config.path("weights").stem)
 
     if args.gemini:
+        from models.gemini_building import GeminiBuildingEstimator
         from models.gemini_decision import GeminiDecisionLayer
         decision_layer = GeminiDecisionLayer(use_cache=not args.no_cache)
+        building_estimator = GeminiBuildingEstimator(use_cache=not args.no_cache)
     else:
         decision_layer = StubDecisionLayer()
+        building_estimator = StubBuildingParams()
 
     seg = segment_case(case_from_folder(args.input), segmenter)
     if args.save:
         save_views(seg, args.save)
-    report = evaluate(seg, building_estimator=StubBuildingParams(), decision_layer=decision_layer,
-                      price_source=CsvPriceSource())
+    prices = CsvPriceSource()
+    report = evaluate(seg, building_estimator=building_estimator, decision_layer=decision_layer,
+                      price_source=prices)
+    if args.floors is not None and report.building is not None:
+        from core.building import best_frame_for_floors
+        from models.gemini_building import recompute
+        masks = [seg.masks[f.view_id] for f in seg.frames]
+        report.building.floors = args.floors
+        building = recompute(report.building, masks[best_frame_for_floors(masks)], {"floors"})
+        report = evaluate(seg, building=building, decision_layer=decision_layer, price_source=prices)
     if args.json:
         print(to_json(report))
     else:

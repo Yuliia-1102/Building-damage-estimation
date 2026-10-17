@@ -85,6 +85,9 @@ class BuildingParams:
     structure_type: str | None = None       # core.reference.STRUCTURE_TYPES, ДСТУ 9273 clause 11.25
     roof_type: str | None = None            # "flat" | "pitched"
     height_override_m: float | None = None  # height from a reference object when floors cannot be read
+    height_source: str | None = None        # "floors" | "reference object: door" | "user" ...
+    occupants_estimate: int | None = None   # rough number of people, for the consequence class
+    consequence_class: str | None = None    # "CC1" | "CC2" | "CC3", ДБН В.1.2-14:2018 table 1 (estimate)
     auto_detected: set[str] = field(default_factory=set)   # names of fields filled automatically
     assumptions: list[str] = field(default_factory=list)   # e.g. "depth assumed equal to width"
 

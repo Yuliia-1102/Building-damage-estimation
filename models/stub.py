@@ -46,6 +46,7 @@ class StubBuildingParams:
             width_m=20.0,
             depth_m=12.0,
             roof_shape_coef=config.get("geometry", "roof_shape_coef_flat"),
+            height_source="stub",
             assumptions=["stub building parameters, not detected"],
         )
 
