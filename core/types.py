@@ -129,6 +129,14 @@ class WorkItem:
 
 
 @dataclass
+class FacadeState:
+    """What the damaged facade area is, judged by the model from the images; the wall works follow from it."""
+    window_openings_share: float = 0.0   # share of the damaged facade area that is window openings
+    destroyed_wall_share: float = 0.0    # share of the rest (the wall) destroyed through: holes, collapse
+    insulated: bool = False              # external insulation (ETICS) instead of plaster
+
+
+@dataclass
 class Decision:
     damage_category: str        # "I" | "II" | "III", core.reference.DAMAGE_CATEGORIES - the main triage result
     condition_category: int     # 1..4, core.reference.CONDITION_CATEGORIES
@@ -139,7 +147,7 @@ class Decision:
     escalation: str = "confirmed"
     roof_covering_category: int | None = None   # computed in code from table В.7.1, not by the model
     is_stub: bool = False       # a fixed placeholder (no model answer): never shown as a result
-    windows_in_destroyed_share: float = 0.0   # model's estimate: window openings inside destroyed walls
+    facade: "FacadeState | None" = None       # the model's assessment of the damaged facade (wall works)
 
     @property
     def damage_name(self) -> str:

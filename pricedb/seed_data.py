@@ -1,7 +1,8 @@
 """Initial materials data (epic 5.2).
 
 Work codes come from core.reference.WORK_TYPES (14 fixed codes): do not invent new work codes here.
-Every work is measured in m2 of damaged surface, so quantity_per_unit means "material per 1 m2 of work".
+quantity_per_unit is material per 1 unit of work: per m2 of damaged surface, except masonry and debris
+removal, which are per m3 of wall (area x wall thickness).
 
 Prices are in UAH per the material's own unit, each with its source:
 - PRICES: the first prices (2026-10-16), mostly market estimates.
@@ -168,15 +169,18 @@ WORKS: dict[str, tuple[str, str, dict[str, float]]] = {
         "Insulated facade restoration", "damaged_facade",
         {"Мінвата фасадна 100 мм": 1.05, "Клей для мінвати": 9.0, "Дюбель для утеплювача": 6.0,
          "Сітка армувальна": 1.1, "Ґрунтовка фасадна": 0.2, "Штукатурка декоративна короїд": 3.0}),
+    # per 1 m3 of wall: 250x120x65 bricks with 10 mm joints take 0.26 x 0.13 x 0.075 m each -> 394 per m3
+    # (+3% waste); about 0.23 m3 of mortar per m3, i.e. ~420 kg of dry mix (Siltek M-1 data sheet)
     "facade_masonry_repair": (
         "Masonry wall repair", "damaged_facade",
-        {"Цегла керамічна повнотіла": 55.0, "Розчин кладковий": 30.0, "Ґрунтовка фасадна": 0.15}),
+        {"Цегла керамічна повнотіла": 406.0, "Розчин кладковий": 420.0}),
     "facade_painting": (
         "Facade painting", "damaged_facade",
         {"Фарба фасадна": 0.3, "Ґрунтовка фасадна": 0.15, "Шпаклівка фасадна": 1.0}),
+    # per 1 m3 of destroyed wall: rubble takes about 1.4 times the volume of the wall it came from
     "facade_debris_removal": (
         "Dismantling and debris removal", "damaged_facade",
-        {"Вивезення будівельного сміття": 0.2}),
+        {"Вивезення будівельного сміття": 1.4}),
     "facade_scaffolding": (
         "Facade scaffolding", "damaged_facade",
         {"Оренда риштувань (місяць)": 2.0}),          # two months of rent
@@ -218,12 +222,12 @@ LABOUR: dict[str, tuple[float, str, str]] = {
                               "https://www.rabotniki.ua/uk/price/shtukaturka-fasada-tsementnopeschannaya-mayachnaya"),
     "facade_etics_repair": (1050.0, "rabotniki.ua: wall insulation with mineral wool 740 + decorative plaster 310",
                             "https://www.rabotniki.ua/uk/price/uteplenie-sten-minvatoy"),
-    "facade_masonry_repair": (700.0, "rabotniki.ua: half-brick masonry, Kyiv 733, Lviv 698, Odesa 665",
-                              "https://www.rabotniki.ua/uk/kladochnye-raboty/kiev"),
+    "facade_masonry_repair": (3141.0, "rabotniki.ua: rough brick masonry per m3, average of 849 price lists",
+                              "https://www.rabotniki.ua/uk/price/stena-chernovaya-ne-bolee-380-sht-na-kub"),
     "facade_painting": (201.0, "rabotniki.ua: facade painting in two coats, average",
                         "https://www.rabotniki.ua/uk/price/pokraska-fasada-ili-steny-dva-sloya"),
-    "facade_debris_removal": (336.0, "rabotniki.ua: dismantling of a one-brick wall, average of 833 price lists",
-                              "https://www.rabotniki.ua/uk/price/demontazh-kirpichnoy-peregorodki-kirpich"),
+    "facade_debris_removal": (1344.0, "rabotniki.ua: dismantling of a one-brick (0.25 m) wall 336 UAH/m2, "
+                                      "i.e. 1344 UAH per m3", "https://www.rabotniki.ua/uk/price/demontazh-kirpichnoy-peregorodki-kirpich"),
     "facade_scaffolding": (111.0, "rabotniki.ua: scaffolding erection and dismantling, average of 452 price lists",
                            "https://www.rabotniki.ua/uk/price/montazh-demontazh-lesov-vertikalnoy-proektsii"),
     "window_glazing_replacement": (717.0, "rabotniki.ua: glass replacement in a window, Kyiv average",

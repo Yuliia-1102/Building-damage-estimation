@@ -1,7 +1,7 @@
 """The parts of the decision step done by code, not by the model: quantities and escalation."""
 from core import config
-from core.reference import WORK_TYPES_BY_CODE
-from core.types import Cls, DamagedAreas, WorkItem
+from core.reference import WALL_WORKS, WORK_TYPES_BY_CODE
+from core.types import BuildingParams, Cls, DamagedAreas, FacadeState, WorkItem
 
 
 def damaged_area_of(cls: Cls, areas: DamagedAreas | None) -> float | None:
@@ -14,31 +14,53 @@ def damaged_area_of(cls: Cls, areas: DamagedAreas | None) -> float | None:
     }[cls]
 
 
-def works_with_quantities(codes: list[str], areas: DamagedAreas | None, shares: dict[str, float] | None = None,
-                          windows_in_destroyed: float = 0.0) -> list[WorkItem]:
-    """The model names the works and, where several alternatives repair one surface, how its damaged area is
-    split between them; code computes the quantities:
-      - a work of an alternatives group: damaged area of its surface x its share (1 if it is the only one);
-      - debris removal: the masonry share of the damaged facade (holed or destroyed walls), all of it if no
-        masonry work was chosen; scaffolding and painting: the whole damaged facade;
-      - windows: broken windows plus the window openings inside destroyed walls (damaged facade x
-        windows_in_destroyed), which the segmentation counts as facade damage."""
-    shares = shares or {}
-    codes = list(dict.fromkeys(codes))         # keep order, drop duplicates
-    masonry = shares.get("facade_masonry_repair", 1.0) if "facade_masonry_repair" in codes else None
+def wall_thickness(building: BuildingParams | None) -> float:
+    """Outer wall thickness for the structure type ([geometry] wall_thickness_m)."""
+    table = config.get("geometry", "wall_thickness_m")
+    kind = (building.structure_type if building else None) or "unknown"
+    return table.get(kind, table["unknown"])
+
+
+def wall_works(facade: FacadeState, damaged_facade_m2: float | None, building: BuildingParams | None) -> list[WorkItem]:
+    """The works on the walls, in the order they are done, from the model's assessment of the damaged facade:
+      window openings (share w of the damaged area) go to the window works, the rest is wall;
+      wall destroyed through (share d of the wall): debris removal and masonry, in m3 of wall (x thickness);
+      all of the wall: finish (plaster, or the insulation system on an insulated facade) and painting;
+      scaffolding over the wall area when the building has more than one floor."""
+    area = None if damaged_facade_m2 is None else damaged_facade_m2 * (1 - facade.window_openings_share)
+    t = wall_thickness(building)
+
+    def item(code: str, quantity: float | None) -> WorkItem:
+        wt = WORK_TYPES_BY_CODE[code]
+        return WorkItem(work_type=code, damage_class=wt.damage_class.name.lower(), quantity=quantity, unit=wt.unit)
+
+    destroyed_m3 = None if area is None else area * facade.destroyed_wall_share * t
     items = []
-    for code in codes:
+    if facade.destroyed_wall_share > 0:
+        items += [item("facade_debris_removal", destroyed_m3), item("facade_masonry_repair", destroyed_m3)]
+    items.append(item("facade_etics_repair" if facade.insulated else "facade_plaster_repair", area))
+    items.append(item("facade_painting", area))
+    if building is None or building.floors is None or building.floors > 1:
+        items.append(item("facade_scaffolding", area))
+    return items
+
+
+def works_with_quantities(codes: list[str], areas: DamagedAreas | None, facade: FacadeState | None = None,
+                          building: BuildingParams | None = None, facade_damaged: bool = False) -> list[WorkItem]:
+    """Wall works from the facade assessment (wall_works), then the works the model chose for windows and roof.
+    Window quantity = broken windows + the window openings inside the damaged facade."""
+    items = []
+    damaged_facade = areas.damaged_facade_m2 if areas else None
+    if facade_damaged and facade is not None:
+        items += wall_works(facade, damaged_facade, building)
+    for code in dict.fromkeys(codes):          # keep order, drop duplicates
+        if code in WALL_WORKS:                 # only the facade assessment adds wall works
+            continue
         wt = WORK_TYPES_BY_CODE[code]
         area = damaged_area_of(wt.damage_class, areas)
-        if area is not None:
-            if wt.damage_class == Cls.BROKEN_WINDOW and areas.damaged_facade_m2:
-                area += areas.damaged_facade_m2 * windows_in_destroyed
-            if code == "facade_debris_removal" and masonry is not None:
-                area *= masonry
-            elif wt.group:
-                area *= shares.get(code, 1.0)
-        items.append(WorkItem(work_type=code, damage_class=wt.damage_class.name.lower(),
-                              quantity=area, unit=wt.unit))
+        if area is not None and wt.damage_class == Cls.BROKEN_WINDOW and damaged_facade and facade:
+            area += damaged_facade * facade.window_openings_share
+        items.append(WorkItem(work_type=code, damage_class=wt.damage_class.name.lower(), quantity=area, unit=wt.unit))
     return items
 
 

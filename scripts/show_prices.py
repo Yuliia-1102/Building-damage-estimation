@@ -25,13 +25,14 @@ LIMIT = config.get("prices", "max_candidates")
 def show(src, code: str) -> None:
     wt = WORK_TYPES_BY_CODE.get(code)
     title = wt.name if wt else code
-    print(f"\n=== {code}  ({title}) ===")
+    unit = wt.unit if wt else "m2"
+    print(f"\n=== {code}  ({title}), per 1 {unit} ===")
     items = src.get_items_by_work_type(code, LIMIT)
     if not items:
         print("  (no materials — unknown work code?)")
         return
     cost_per_m2 = 0.0
-    print(f"  {'material':24} {'qty/m2':>8} {'unit':5} {'price':>9} {'line/m2':>10}")
+    print(f"  {'material':24} {'qty/unit':>8} {'unit':5} {'price':>9} {'per unit':>10}")
     for it in items:
         found = src.get_price_as_of(it["id"], AS_OF)
         if found is None:
@@ -47,7 +48,7 @@ def show(src, code: str) -> None:
     if labour is not None:
         print(f"  {'':24} {'':8} {'':5} {'labour':>9} {labour[0]:>10.2f} UAH")
         cost_per_m2 += labour[0]
-    print(f"  {'':24} {'':8} {'':5} {'TOTAL/m2':>9} {cost_per_m2:>10.2f} UAH")
+    print(f"  {'':24} {'':8} {'':5} {'TOTAL':>9} {cost_per_m2:>10.2f} UAH")
 
 
 def main() -> None:

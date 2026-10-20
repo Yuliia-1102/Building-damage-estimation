@@ -30,13 +30,13 @@ def test_export_answer_import_then_cached():
     assert request["schema_name"] == "DecisionResponse" and request["images"] == ["image1.jpg"]
     assert (folder / "image1.jpg").exists() and "Damage category" in request["prompt"]
 
-    (folder / "answer.json").write_text('{"damage_category": "II", "condition_category": 3, '
-                                        '"confidence": 0.7, "work_types": ["facade_plaster_repair", '
-                                        '"facade_masonry_repair"]}')
-    assert claude_bridge.import_answer(folder).startswith("invalid")       # two repairs of one surface
-    (folder / "answer.json").write_text('{"damage_category": "II", "condition_category": 3, '
-                                        '"confidence": 0.7, "work_types": ["facade_masonry_repair"]}')
+    facade = '"facade": {"window_openings_share": 0.1, "destroyed_wall_share": 0.3, "insulated": false}'
+    (folder / "answer.json").write_text('{"damage_category": "II", "condition_category": 3, "confidence": 0.7, '
+                                        '"work_types": ["facade_masonry_repair"]}')
+    assert claude_bridge.import_answer(folder).startswith("invalid")       # no facade, a wall work chosen
+    (folder / "answer.json").write_text('{"damage_category": "II", "condition_category": 3, "confidence": 0.7, '
+                                        + facade + ', "work_types": []}')
     assert claude_bridge.import_answer(folder) == "ok"
     assert claude_bridge.pending() == []
     d = GeminiDecisionLayer(model="claude-sonnet-5-5").decide(ratios, areas, None, views={1: (image, mask)})
-    assert d.damage_category == "II" and d.works[0].work_type == "facade_masonry_repair"
+    assert d.damage_category == "II" and "facade_masonry_repair" in [w.work_type for w in d.works]

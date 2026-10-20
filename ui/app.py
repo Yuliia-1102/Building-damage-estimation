@@ -30,10 +30,10 @@ from core.case import case_from_paths, case_from_video  # noqa: E402
 from core.imageio import LEGEND, overlay  # noqa: E402
 from core.pipeline import evaluate, segment_case  # noqa: E402
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA,  # noqa: E402
-                            DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
+                            DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, UNITS_UA, WORK_NAMES_UA)
 from core.provenance import consequence_note, parameter_rows  # noqa: E402
 from core.report_pdf import (STUB_UA, COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf,  # noqa: E402
-                             walls_seen_ua)
+                             facade_notes, walls_seen_ua)
 
 st.set_page_config(page_title="Оцінка пошкоджень будівлі", page_icon="🏚️", layout="wide")
 
@@ -416,13 +416,14 @@ def cost_section(report):
             for w in d.works:
                 cost = sum(l.cost for l in k.lines if l.work_type == w.work_type) if k else None
                 rows.append({"Робота": WORK_NAMES_UA.get(w.work_type, w.work_type),
-                             "Обсяг, м²": round(w.quantity) if w.quantity else None,
+                             "Обсяг": f"{w.quantity:,.1f} {UNITS_UA.get(w.unit, w.unit)}".replace(",", " ")
+                             if w.quantity else "—",
                              "Вартість, грн": round(cost) if cost else None})
             st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
                          column_config={"Вартість, грн": st.column_config.NumberColumn(format="localized")})
-            if d.windows_in_destroyed_share:
-                st.caption(f"Обсяг вікон включає прорізи у зруйнованих стінах: за оцінкою моделі "
-                           f"{d.windows_in_destroyed_share:.0%} площі пошкоджень фасаду.")
+    if d.facade:
+        with st.expander("Як складено роботи на стінах"):
+            st.markdown("\n".join("- " + n for n in facade_notes(d, report.building)))
     if k and k.lines:
         with st.expander("Розрахунок по позиціях: матеріали і робота"):
             st.dataframe(pd.DataFrame([{

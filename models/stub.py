@@ -56,18 +56,22 @@ class StubDecisionLayer:
 
     def decide(self, ratios: CombinedRatios, areas: DamagedAreas | None, building, views=None) -> Decision:
         from core.decision import escalation_level, works_with_quantities
-        from core.reference import WORK_TYPES, roof_covering_category
+        from core.reference import MODEL_WORKS, WORK_TYPES, roof_covering_category
+        from core.types import FacadeState
 
         damaged = {"damaged_facade": ratios.damaged_facade, "broken_window": ratios.broken_window,
                    "damaged_roof": ratios.damaged_roof}
         roof = getattr(building, "roof_type", None) or "flat"
         codes, groups = [], set()
-        for w in WORK_TYPES:             # first alternative of each group, plus additional works
-            if w.roof_type not in (None, roof):
+        for w in WORK_TYPES:             # windows and roof: first alternative of each group, plus additional works
+            if w.code not in MODEL_WORKS or w.roof_type not in (None, roof):
                 continue
             if damaged[w.damage_class.name.lower()] and (w.group is None or w.group not in groups):
                 codes.append(w.code)
                 groups.add(w.group)
+        facade = FacadeState()            # surface damage only
         return Decision(damage_category="I", condition_category=2, confidence=0.6,
-                        works=works_with_quantities(codes, areas), escalation=escalation_level(0.6),
+                        works=works_with_quantities(codes, areas, facade, building,
+                                                    facade_damaged=bool(ratios.damaged_facade)),
+                        facade=facade, escalation=escalation_level(0.6),
                         roof_covering_category=roof_covering_category(ratios.damaged_roof), is_stub=True)

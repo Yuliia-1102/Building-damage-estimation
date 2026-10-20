@@ -4,6 +4,8 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from core.reference import WORK_TYPES_BY_CODE
+
 from . import seed_data
 from .models import DamageClass, Material, Price, WorkMaterial, WorkType
 from .prices import set_labour_rate, set_price
@@ -37,16 +39,23 @@ def load_seed(session: Session) -> None:
 
     classes = {c.code: c for c in session.scalars(select(DamageClass))}
     for code, (name, class_code, used) in seed_data.WORKS.items():
+        unit = WORK_TYPES_BY_CODE[code].unit
         work = session.scalar(select(WorkType).where(WorkType.code == code))
         if work is None:
-            work = WorkType(code=code, name=name, unit="m2",
-                            damage_class=classes[class_code])
+            work = WorkType(code=code, name=name, unit=unit, damage_class=classes[class_code])
             session.add(work)
             session.flush()
-        for material_name, qty in used.items():
-            if session.get(WorkMaterial, (work.id, materials[material_name].id)) is None:
-                session.add(WorkMaterial(work_type=work, material=materials[material_name],
-                                        quantity_per_unit=qty))
+        work.unit = unit                 # the bill of quantities follows the seed: unit and quantities
+        wanted = {materials[m].id: q for m, q in used.items()}
+        for link in list(work.materials):
+            if link.material_id not in wanted:
+                session.delete(link)
+        for material_id, qty in wanted.items():
+            link = session.get(WorkMaterial, (work.id, material_id))
+            if link is None:
+                session.add(WorkMaterial(work_type=work, material_id=material_id, quantity_per_unit=qty))
+            else:
+                link.quantity_per_unit = qty
 
     session.commit()
 

@@ -35,7 +35,10 @@ roof_shape_coef_flat = 1.0
 # Building measured from the mask: column heights / row widths at this percentile, robust to occlusion.
 main_building_grid = 200      # px of the coarse grid used to find the main building (connected regions)
 main_building_gap = 0.03      # parts of one building closer than this share of the frame are joined
-depth_min_views = 3           # views of different sides needed to measure the depth instead of assuming it
+depth_min_views = 3
+# Outer wall thickness by structure type, for masonry and debris volumes (m). Brick: 1.5 bricks, typical of
+# 5-9 storey housing (older buildings have 2 bricks, 0.51); panel: three-layer concrete panel; frames: infill.
+wall_thickness_m = {brick = 0.38, large_panel = 0.3, monolithic_frame = 0.25, precast_frame = 0.25, steel_frame = 0.25, wooden = 0.2, unknown = 0.38}
 floor_frame_attempts = 3       # frames shown to the model until the floors can be read (1 request each)
 mask_extent_percentile = 95
 # Reference objects for the height fallback (plan.txt, section 4), metres.

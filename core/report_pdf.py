@@ -13,7 +13,7 @@ from PIL import Image
 from core import config
 from core.imageio import LEGEND, overlay
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA, DISCLAIMER_UA,
-                            ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
+                            ESCALATION_UA, STRUCTURE_NAMES_UA, UNITS_UA, WORK_NAMES_UA)
 from core.provenance import consequence_note, parameter_rows
 from core.types import Report
 
@@ -43,6 +43,23 @@ def walls_seen_ua(a, fmt) -> str:
     if share < 0.9:
         text += " — пошкодження і вартість пораховано лише для видимих стін; інші сторони не оцінено"
     return text
+
+
+def facade_notes(d, building) -> list[str]:
+    """The model's assessment of the damaged facade and how the wall works follow from it."""
+    from core.decision import wall_thickness
+    f = d.facade
+    t = wall_thickness(building)
+    kind = STRUCTURE_NAMES_UA.get((building.structure_type if building else None) or "unknown", "невідомо")
+    return [
+        f"Віконні прорізи: {f.window_openings_share:.0%} пошкодженої площі фасаду (оцінка моделі за фото; "
+        f"сегментація позначає вікна у зруйнованих стінах як пошкодження фасаду). Вони пораховані у віконних "
+        f"роботах, а не в стінових.",
+        f"Зруйновано наскрізь: {f.destroyed_wall_share:.0%} решти стіни (оцінка моделі). На цій частині: "
+        f"розбирання і вивіз уламків, кладка в м³ за товщиною стіни {t:.2f} м ({kind}), далі оздоблення.",
+        f"Оздоблення і фарбування: на всій пошкодженій стіні; "
+        f"{'система утеплення з декоративною штукатуркою' if f.insulated else 'штукатурка'}.",
+    ]
 
 
 def assumption_ua(text: str) -> str:
@@ -300,13 +317,12 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         rows = [["Робота", "Обсяг", "Вартість"]]
         for w in d.works:
             cost = sum(l.cost for l in k.lines if l.work_type == w.work_type) if k else None
-            rows.append([WORK_NAMES_UA.get(w.work_type, w.work_type), _num(w.quantity, " м²"),
-                         _uah(cost) if cost else "—"])
+            rows.append([WORK_NAMES_UA.get(w.work_type, w.work_type),
+                         _num(w.quantity, " " + UNITS_UA.get(w.unit, w.unit)), _uah(cost) if cost else "—"])
         _table(pdf, rows, widths=[90, 40, 50])
-        if d.windows_in_destroyed_share:
-            _p(pdf, f"Обсяг вікон включає віконні прорізи у зруйнованих стінах: за оцінкою моделі "
-                    f"{d.windows_in_destroyed_share:.0%} площі пошкоджень фасаду (сегментація позначає їх як "
-                    f"пошкодження фасаду).")
+        if d.facade:
+            _sub(pdf, "Як складено роботи на стінах")
+            _bullets(pdf, facade_notes(d, report.building))
     if k:
         pdf.set_font("dejavu", "B", 11)
         pdf.multi_cell(0, 6, f"Орієнтовна вартість: від {_uah(k.low)} до {_uah(k.high)}", new_x="LMARGIN",

@@ -72,10 +72,10 @@ WORK_TYPES = [
     WorkType("facade_etics_repair", Cls.DAMAGED_FACADE, "Insulated facade restoration (mineral wool, mesh, "
              "decorative plaster), for facades with external insulation", group="facade_repair"),
     WorkType("facade_masonry_repair", Cls.DAMAGED_FACADE, "Masonry wall rebuilding (holes, destroyed walls)",
-             group="facade_repair"),
+             unit="m3", group="facade_repair"),
     WorkType("facade_painting", Cls.DAMAGED_FACADE, "Facade painting (finishing after plaster or masonry repair)"),
     WorkType("facade_debris_removal", Cls.DAMAGED_FACADE, "Dismantling of destroyed structures and debris removal "
-             "(holes, collapsed or burnt parts)"),
+             "(holes, collapsed or burnt parts)", unit="m3"),
     WorkType("facade_scaffolding", Cls.DAMAGED_FACADE, "Facade scaffolding (any facade work above the ground floor)"),
     # broken windows: one of three
     WorkType("window_glazing_replacement", Cls.BROKEN_WINDOW, "Glazing replacement (frames intact)", group="window"),
@@ -97,6 +97,15 @@ WORK_TYPES = [
 ]
 
 WORK_TYPES_BY_CODE = {w.code: w for w in WORK_TYPES}
+
+# Works on the walls are put together by code from the model's assessment of the damaged facade (how much is
+# window openings, how much wall is destroyed through, whether it is insulated): the technology sequence is
+# fixed (debris removal -> masonry -> finish -> painting), only the shares need judgement. The model chooses
+# the window and roof works itself.
+WALL_WORKS = ("facade_plaster_repair", "facade_etics_repair", "facade_masonry_repair", "facade_painting",
+              "facade_debris_removal", "facade_scaffolding")
+MODEL_WORKS = tuple(w.code for w in WORK_TYPES if w.code not in WALL_WORKS)
+UNITS_UA = {"m2": "м²", "m3": "м³"}
 
 
 # Ukrainian labels for the interface and the PDF report.

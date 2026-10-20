@@ -59,8 +59,9 @@ class FakeClient:
         return SimpleNamespace(text=self.answers.pop(0))
 
 
-GOOD = json.dumps({"damage_category": "II", "condition_category": 3, "confidence": 0.8,
-                   "work_types": ["facade_masonry_repair", "window_unit_replacement"]})
+FACADE = {"window_openings_share": 0.2, "destroyed_wall_share": 0.5, "insulated": False}
+GOOD = json.dumps({"damage_category": "II", "condition_category": 3, "confidence": 0.8, "facade": FACADE,
+                   "work_types": ["window_unit_replacement"]})
 
 
 def test_decision_retries_on_invalid_answer_and_computes_quantities():
@@ -68,8 +69,11 @@ def test_decision_retries_on_invalid_answer_and_computes_quantities():
     d = GeminiDecisionLayer(client=client, model="fake").decide(RATIOS, AREAS, None)
     assert client.calls == 2
     assert d.damage_category == "II" and d.condition_category == 3 and d.escalation == "confirmed"
-    assert [(w.work_type, w.quantity) for w in d.works] == [
-        ("facade_masonry_repair", 300), ("window_unit_replacement", 100)]
+    # damaged facade 300 m2: 20% window openings -> wall 240 m2, half destroyed -> 120 m2 x 0.38 m = 45.6 m3
+    q = {w.work_type: (round(w.quantity, 1), w.unit) for w in d.works}
+    assert q == {"facade_debris_removal": (45.6, "m3"), "facade_masonry_repair": (45.6, "m3"),
+                 "facade_plaster_repair": (240, "m2"), "facade_painting": (240, "m2"),
+                 "facade_scaffolding": (240, "m2"), "window_unit_replacement": (160, "m2")}
 
 
 def test_unknown_work_type_is_rejected():
@@ -94,7 +98,7 @@ def test_prompt_marks_unseen_surface():
 
 
 def test_quantity_unknown_without_areas():
-    assert works_with_quantities(["facade_painting"], None)[0].quantity is None
+    assert works_with_quantities(["window_unit_replacement"], None)[0].quantity is None
 
 
 def test_escalation_levels():
@@ -122,11 +126,11 @@ def test_prompt_has_worst_view_and_vertical_split():
 
 
 def test_two_alternative_repairs_of_same_area_are_rejected():
-    double = json.dumps({"damage_category": "II", "condition_category": 3, "confidence": 0.7,
-                         "work_types": ["facade_plaster_repair", "facade_masonry_repair"]})
+    double = json.dumps({"damage_category": "II", "condition_category": 3, "confidence": 0.7, "facade": FACADE,
+                         "work_types": ["window_glazing_replacement", "window_unit_replacement"]})
     client = FakeClient(double, GOOD)
     d = GeminiDecisionLayer(client=client, model="fake").decide(RATIOS, AREAS, None)
-    assert client.calls == 2 and [w.work_type for w in d.works] == ["facade_masonry_repair", "window_unit_replacement"]
+    assert client.calls == 2 and [w.work_type for w in d.works][-1] == "window_unit_replacement"
 
 
 def test_roof_works_follow_the_roof_type():
@@ -159,30 +163,20 @@ def test_decision_shows_the_worst_views_and_caches_by_image():
     assert len(seen) == 2                                   # another image: a new request
 
 
-def test_alternative_works_split_the_damaged_area():
-    from core.decision import works_with_quantities
-    areas = DamagedAreas(wall_area_m2=1000, roof_area_m2=None, damaged_facade_m2=100, broken_window_m2=10,
-                         damaged_roof_m2=None)
-    codes = ["facade_masonry_repair", "facade_plaster_repair", "facade_debris_removal", "facade_painting",
-             "facade_scaffolding", "window_unit_replacement"]
-    q = {w.work_type: w.quantity for w in works_with_quantities(
-        codes, areas, {"facade_masonry_repair": 0.3, "facade_plaster_repair": 0.7}, windows_in_destroyed=0.2)}
-    assert q["facade_masonry_repair"] == pytest.approx(30) and q["facade_plaster_repair"] == pytest.approx(70)
-    assert q["facade_debris_removal"] == pytest.approx(30)          # only where walls are holed
-    assert q["facade_painting"] == pytest.approx(100) and q["facade_scaffolding"] == pytest.approx(100)
-    assert q["window_unit_replacement"] == pytest.approx(10 + 100 * 0.2)
+def test_wall_works_follow_the_facade_assessment():
+    from core.decision import wall_works
+    from core.types import BuildingParams, FacadeState
+    one_floor = BuildingParams(floors=1, floor_height_m=3, width_m=10, depth_m=10, roof_shape_coef=1,
+                               structure_type="large_panel")
+    codes = [w.work_type for w in wall_works(FacadeState(0, 0, insulated=True), 100, one_floor)]
+    assert codes == ["facade_etics_repair", "facade_painting"]          # surface only, no scaffolding at 1 floor
+    works = {w.work_type: w.quantity for w in wall_works(FacadeState(0.5, 0.4), 100, one_floor)}
+    assert works["facade_masonry_repair"] == pytest.approx(50 * 0.4 * 0.3)   # panel wall 0.3 m
 
 
-def test_shares_must_add_up_within_a_group():
+def test_model_cannot_choose_wall_works():
     from pydantic import ValidationError
     from models.gemini_decision import DecisionResponse
-    base = {"damage_category": "I", "condition_category": 2, "confidence": 0.8,
-            "work_types": ["facade_masonry_repair", "facade_plaster_repair"]}
     with pytest.raises(ValidationError):
-        DecisionResponse.model_validate(base)                         # two repairs, no split
-    with pytest.raises(ValidationError):
-        DecisionResponse.model_validate({**base, "shares": [{"work_type": "facade_masonry_repair", "share": 0.5},
-                                                            {"work_type": "facade_plaster_repair", "share": 0.2}]})
-    ok = DecisionResponse.model_validate({**base, "shares": [{"work_type": "facade_masonry_repair", "share": 0.3},
-                                                             {"work_type": "facade_plaster_repair", "share": 0.7}]})
-    assert ok.windows_in_destroyed_share == 0
+        DecisionResponse.model_validate({"damage_category": "I", "condition_category": 2, "confidence": 0.8,
+                                         "facade": FACADE, "work_types": ["facade_masonry_repair"]})

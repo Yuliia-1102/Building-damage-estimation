@@ -7,22 +7,27 @@ The scales are described on the Confluence page "Condition and damage scales".
 """
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from core.decision import escalation_level, match_roof_type, works_with_quantities
-from core.reference import (CONDITION_CATEGORIES, DAMAGE_CATEGORIES, WORK_TYPES, WORK_TYPES_BY_CODE,
+from core.reference import (CONDITION_CATEGORIES, DAMAGE_CATEGORIES, MODEL_WORKS, WORK_TYPES, WORK_TYPES_BY_CODE,
                             roof_covering_category)
 from core import cache, config
 from core.imageio import building_box, overlay_for_model
-from core.types import BuildingParams, CombinedRatios, DamagedAreas, Decision
+from core.types import BuildingParams, CombinedRatios, DamagedAreas, Decision, FacadeState
 from models.gemini_client import GeminiJSON
 
-WorkTypeCode = Literal[tuple(w.code for w in WORK_TYPES)]
+WorkTypeCode = Literal[MODEL_WORKS]
 
 
-class WorkShare(BaseModel):
-    work_type: WorkTypeCode
-    share: float = Field(ge=0.0, le=1.0, description="Share of the damaged area of its surface done this way")
+class FacadeAssessment(BaseModel):
+    window_openings_share: float = Field(
+        ge=0.0, le=1.0, description="Share of the damaged facade area (purple) that is window openings: the "
+                                    "segmentation marks windows inside destroyed or burnt walls as facade damage")
+    destroyed_wall_share: float = Field(
+        ge=0.0, le=1.0, description="Of the rest (the wall itself), the share destroyed through: holes, collapsed "
+                                    "or burnt-out parts that need rebuilding; the remainder is surface damage")
+    insulated: bool = Field(description="The facade has external insulation (insulation boards under plaster)")
 
 
 class DecisionResponse(BaseModel):
@@ -30,39 +35,18 @@ class DecisionResponse(BaseModel):
     damage_category: Literal["I", "II", "III"] = Field(description="Damage category, Methodology No. 144")
     condition_category: int = Field(ge=1, le=4, description="Technical condition category, ДСТУ 9273:2024")
     confidence: float = Field(ge=0.0, le=1.0, description="How sure the categories are, 0-1")
-    work_types: list[WorkTypeCode] = Field(description="Work type codes needed to restore the building")
-    shares: list[WorkShare] = Field(
-        default_factory=list,
-        description="When two or more works of one alternatives group are chosen: how the damaged area of that "
-                    "surface is split between them; the shares of a group add up to 1")
-    windows_in_destroyed_share: float = Field(
-        0.0, ge=0.0, le=0.5,
-        description="Share of the damaged facade area that is window openings destroyed together with the wall "
-                    "(the segmentation counts them as facade damage, not as broken windows); 0 if none")
+    facade: FacadeAssessment = Field(description="What the damaged facade area is; the wall works follow from it")
+    work_types: list[WorkTypeCode] = Field(description="Window and roof work codes needed")
 
-    @model_validator(mode="after")
-    def shares_add_up(self):
-        """Alternative repairs of one surface split its area: shares within a group must add up to 1, otherwise
-        the same square metres would be paid for twice (or not at all)."""
-        chosen = set(self.work_types)
-        groups: dict[str, list[str]] = {}
-        for code in chosen:
-            if (g := WORK_TYPES_BY_CODE[code].group):
-                groups.setdefault(g, []).append(code)
-        given = {s.work_type: s.share for s in self.shares}
-        for g, codes in groups.items():
-            if len(codes) < 2:
-                continue
-            missing = [c for c in codes if c not in given]
-            if missing:
-                raise ValueError(f"group {g}: several works chosen, give a share for each of {', '.join(codes)}")
-            total = sum(given[c] for c in codes)
-            if abs(total - 1) > 0.05:
-                raise ValueError(f"group {g}: shares add up to {total:.2f}, must be 1")
-        stray = [c for c in given if c not in chosen]
-        if stray:
-            raise ValueError(f"shares given for works not chosen: {', '.join(stray)}")
-        return self
+    @field_validator("work_types")
+    @classmethod
+    def one_per_group(cls, codes):
+        """Two alternative works for the same windows or the same roof would count the same area twice."""
+        groups = [WORK_TYPES_BY_CODE[c].group for c in set(codes) if WORK_TYPES_BY_CODE[c].group]
+        dup = {g for g in groups if groups.count(g) > 1}
+        if dup:
+            raise ValueError(f"more than one alternative work chosen for: {', '.join(sorted(dup))}")
+        return codes
 
 
 SYSTEM_INSTRUCTION = """\
@@ -97,7 +81,7 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
     works = "\n".join(f"  {w.code}  (repairs {w.damage_class.name.lower()}"
                       f"{', alternatives group ' + w.group if w.group else ', additional work, can be added'}"
                       f"{', ' + w.roof_type + ' roofs only' if w.roof_type else ''}): {w.name}"
-                      for w in WORK_TYPES)
+                      for w in WORK_TYPES if w.code in MODEL_WORKS)
     roof_cat = roof_covering_category(ratios.damaged_roof)
 
     lines = [
@@ -142,7 +126,7 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
 
     lines += [
         "",
-        "Allowed work types:",
+        "Allowed work types (windows and roof; the wall works are put together from your facade assessment):",
         works,
         "",
         "Rules:",
@@ -161,21 +145,15 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
         "when a part of the building is destroyed through its full height or its load-bearing walls are holed "
         "(a destroyed section, a collapsed corner), even if the rest is intact.",
         "- Choose work types only for surfaces that show damage. A surface marked 'not visible' was not "
-        "assessed: do not add works for it.",
-        "- Works in the same alternatives group repair the same area in different ways. If the whole damaged "
-        "area of that surface needs one way, choose one. If it is mixed, choose several and split the area in "
-        "'shares' by what the images show, e.g. a few holes through the wall and many chipped spots: "
-        "facade_masonry_repair 0.3, facade_plaster_repair 0.7. The shares of a group add up to 1. Each work "
-        "is then done on its share only, so do not pick masonry for the whole facade because of a few holes.",
-        "- Debris removal is counted on the masonry share (walls holed or destroyed); scaffolding and painting "
-        "on the whole damaged facade area.",
-        "- windows_in_destroyed_share: where walls are destroyed or burnt out, the window openings in them are "
-        "marked as facade damage, not as broken windows. Estimate from the images what share of the damaged "
-        "facade area is such window openings (typically 0.15-0.3 for burnt-out or holed residential walls, 0 for "
-        "surface damage only). Those windows are added to the window works.",
+        "assessed: do not add works for it. Choose at most one work per alternatives group.",
         "- Roof works marked 'pitched roofs only' or 'flat roofs only' must match the roof type of the building.",
-        "- Facade scaffolding is needed for facade works on buildings above one floor. Debris removal is needed "
-        "when walls are holed, collapsed or burnt through.",
+        "- facade: judge from the images what the damaged facade area (purple) is. window_openings_share: the part "
+        "that is window openings - inside burnt or destroyed walls the segmentation marks windows as facade "
+        "damage; it can be anything from 0 (a blank wall) to most of the area (a burnt-out facade of windows). "
+        "destroyed_wall_share: of the remaining wall, the part destroyed through (holes, collapsed or burnt-out "
+        "masonry) that has to be rebuilt; the rest is surface damage (chipped, cracked, sooted, plaster or cladding "
+        "lost). insulated: the facade has an insulation layer. The code then adds debris removal and masonry on the "
+        "destroyed wall, plaster or the insulation system and painting on the whole wall, and scaffolding.",
         "- For a building in damage category III do not restore windows; close the openings temporarily.",
         "- confidence: low when few views were assessed, a surface is not visible, or the measurements are "
         "borderline between two categories; high only when the category is clear. Load-bearing structures "
@@ -222,16 +200,14 @@ class GeminiDecisionLayer:
             prompt += "\n\n" + IMAGES_NOTE.format(n=len(ids), ids=", ".join(map(str, ids)))
         self.last_images = images
         answer = self.ask(prompt, images)
-        roof_type = building and building.roof_type
-        codes = match_roof_type(answer.work_types, roof_type)
-        shares = {match_roof_type([s.work_type], roof_type)[0]: s.share for s in answer.shares
-                  if match_roof_type([s.work_type], roof_type)}
+        codes = match_roof_type(answer.work_types, building and building.roof_type)
+        facade = FacadeState(**answer.facade.model_dump())
         return Decision(
             damage_category=answer.damage_category,
             condition_category=answer.condition_category,
             confidence=answer.confidence,
-            works=works_with_quantities(codes, areas, shares, answer.windows_in_destroyed_share),
-            windows_in_destroyed_share=answer.windows_in_destroyed_share,
+            works=works_with_quantities(codes, areas, facade, building, facade_damaged=bool(ratios.damaged_facade)),
+            facade=facade,
             escalation=escalation_level(answer.confidence),
             roof_covering_category=roof_covering_category(ratios.damaged_roof),
         )
