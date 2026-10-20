@@ -157,3 +157,32 @@ def test_decision_shows_the_worst_views_and_caches_by_image():
     views[3] = (np.random.default_rng(0).integers(0, 255, image.shape, dtype=np.uint8), mask)
     layer.decide(ratios, AREAS, None, views=views)
     assert len(seen) == 2                                   # another image: a new request
+
+
+def test_alternative_works_split_the_damaged_area():
+    from core.decision import works_with_quantities
+    areas = DamagedAreas(wall_area_m2=1000, roof_area_m2=None, damaged_facade_m2=100, broken_window_m2=10,
+                         damaged_roof_m2=None)
+    codes = ["facade_masonry_repair", "facade_plaster_repair", "facade_debris_removal", "facade_painting",
+             "facade_scaffolding", "window_unit_replacement"]
+    q = {w.work_type: w.quantity for w in works_with_quantities(
+        codes, areas, {"facade_masonry_repair": 0.3, "facade_plaster_repair": 0.7}, windows_in_destroyed=0.2)}
+    assert q["facade_masonry_repair"] == pytest.approx(30) and q["facade_plaster_repair"] == pytest.approx(70)
+    assert q["facade_debris_removal"] == pytest.approx(30)          # only where walls are holed
+    assert q["facade_painting"] == pytest.approx(100) and q["facade_scaffolding"] == pytest.approx(100)
+    assert q["window_unit_replacement"] == pytest.approx(10 + 100 * 0.2)
+
+
+def test_shares_must_add_up_within_a_group():
+    from pydantic import ValidationError
+    from models.gemini_decision import DecisionResponse
+    base = {"damage_category": "I", "condition_category": 2, "confidence": 0.8,
+            "work_types": ["facade_masonry_repair", "facade_plaster_repair"]}
+    with pytest.raises(ValidationError):
+        DecisionResponse.model_validate(base)                         # two repairs, no split
+    with pytest.raises(ValidationError):
+        DecisionResponse.model_validate({**base, "shares": [{"work_type": "facade_masonry_repair", "share": 0.5},
+                                                            {"work_type": "facade_plaster_repair", "share": 0.2}]})
+    ok = DecisionResponse.model_validate({**base, "shares": [{"work_type": "facade_masonry_repair", "share": 0.3},
+                                                             {"work_type": "facade_plaster_repair", "share": 0.7}]})
+    assert ok.windows_in_destroyed_share == 0

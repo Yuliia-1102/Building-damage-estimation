@@ -31,6 +31,7 @@ from core.imageio import LEGEND, overlay  # noqa: E402
 from core.pipeline import evaluate, segment_case  # noqa: E402
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA,  # noqa: E402
                             DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
+from core.provenance import consequence_note, parameter_rows  # noqa: E402
 from core.report_pdf import (STUB_UA, COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf,  # noqa: E402
                              walls_seen_ua)
 
@@ -289,14 +290,13 @@ def building_section(report):
     c[0].metric("Поверхів", b.floors or "—")
     c[1].metric("Висота", num(b.height_m, " м"))
     c[2].metric("Ширина × глибина", f"{num(b.width_m)} × {num(b.depth_m)} м" if b.width_m else "—")
-    c[3].metric("Клас наслідків", b.consequence_class or "—",
-                help=f"ДБН В.1.2-14:2018, табл. 1; оцінка ~{b.occupants_estimate or '—'} осіб за площею")
-    st.markdown(
-        f"<span class='muted'>Тип конструкції: <b>{STRUCTURE_NAMES_UA.get(b.structure_type or 'unknown')}</b> · "
-        f"дах: <b>{ {'flat': 'плаский', 'pitched': 'скатний'}.get(b.roof_type or '', 'невідомо')}</b> · "
-        f"визначено автоматично: {', '.join(sorted(b.auto_detected)) or '—'}</span>", unsafe_allow_html=True)
-    if b.assumptions:
-        st.caption("Припущення: " + "; ".join(assumption_ua(x) for x in b.assumptions))
+    c[3].metric("Клас наслідків", b.consequence_class or "—", help=consequence_note(b))
+    st.dataframe(pd.DataFrame(parameter_rows(b), columns=["Параметр", "Значення", "Звідки значення"]),
+                 hide_index=True, width="stretch")
+    st.caption("Клас наслідків — " + consequence_note(b) + ".")
+    notes = [assumption_ua(x) for x in b.assumptions if not x.startswith("depth ")]
+    if notes:
+        st.caption("Припущення: " + "; ".join(notes))
 
     with st.expander("✏️ Виправити параметри і перерахувати", expanded=False):
         st.caption("Помилка на один поверх лінійно змінює всю вартість. Сегментація не перезапускається: "
@@ -420,6 +420,9 @@ def cost_section(report):
                              "Вартість, грн": round(cost) if cost else None})
             st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
                          column_config={"Вартість, грн": st.column_config.NumberColumn(format="localized")})
+            if d.windows_in_destroyed_share:
+                st.caption(f"Обсяг вікон включає прорізи у зруйнованих стінах: за оцінкою моделі "
+                           f"{d.windows_in_destroyed_share:.0%} площі пошкоджень фасаду.")
     if k and k.lines:
         with st.expander("Розрахунок по позиціях: матеріали і робота"):
             st.dataframe(pd.DataFrame([{

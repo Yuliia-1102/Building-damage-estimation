@@ -139,6 +139,7 @@ class Decision:
     escalation: str = "confirmed"
     roof_covering_category: int | None = None   # computed in code from table В.7.1, not by the model
     is_stub: bool = False       # a fixed placeholder (no model answer): never shown as a result
+    windows_in_destroyed_share: float = 0.0   # model's estimate: window openings inside destroyed walls
 
     @property
     def damage_name(self) -> str:

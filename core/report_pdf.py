@@ -14,6 +14,7 @@ from core import config
 from core.imageio import LEGEND, overlay
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA, DISCLAIMER_UA,
                             ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
+from core.provenance import consequence_note, parameter_rows
 from core.types import Report
 
 FONT_DIR = config.ROOT / "resources" / "fonts"
@@ -161,7 +162,6 @@ SOURCES = [
      "https://zakon.isu.net.ua/sites/default/files/normdocs/tekst_dbn_v.1.2-14_2018_sistema_zabezpechennya_nadiynosti_ta_.pdf"),
 ]
 
-HEIGHT_SOURCE_UA = {"floors": "за кількістю поверхів", "user": "введено користувачем"}
 
 
 def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> bytes:
@@ -216,23 +216,13 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     if b is None:
         _p(pdf, "Параметри не визначено.")
     else:
-        auto = lambda f: "авто" if f in b.auto_detected else "введено"
-        _table(pdf, [
-            ["Параметр", "Значення", "Джерело"],
-            ["Кількість поверхів", _num(b.floors and float(b.floors)).replace(".0", ""), auto("floors")],
-            ["Висота", _num(b.height_m, " м"), HEIGHT_SOURCE_UA.get(b.height_source or "", b.height_source or "")],
-            ["Ширина", _num(b.width_m, " м"), auto("width_m")],
-            ["Глибина", _num(b.depth_m, " м"), auto("depth_m")],
-            ["Тип конструкції", STRUCTURE_NAMES_UA.get(b.structure_type or "unknown", "невідомо"),
-             auto("structure_type")],
-            ["Тип даху", {"flat": "плаский", "pitched": "скатний"}.get(b.roof_type or "", "невідомо"),
-             auto("roof_type")],
-            ["Клас наслідків (оцінка)", f"{b.consequence_class or '—'} (~{b.occupants_estimate or '—'} осіб)",
-             "ДБН В.1.2-14:2018, табл. 1"],
-        ], widths=[60, 60, 60])
-        if b.assumptions:
+        _table(pdf, [["Параметр", "Значення", "Звідки значення"]] + [list(r) for r in parameter_rows(b)],
+               widths=[45, 45, 90])
+        _kv(pdf, [("Клас наслідків (ДБН В.1.2-14:2018, табл. 1)", consequence_note(b))], widths=(55, 125))
+        notes = [assumption_ua(a) for a in b.assumptions if not a.startswith("depth ")]
+        if notes:
             _sub(pdf, "Припущення")
-            _bullets(pdf, [assumption_ua(a) for a in b.assumptions])
+            _bullets(pdf, notes)
 
     # 3. Damage measurements
     _h(pdf, "3. Виміряні пошкодження")
@@ -313,6 +303,10 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
             rows.append([WORK_NAMES_UA.get(w.work_type, w.work_type), _num(w.quantity, " м²"),
                          _uah(cost) if cost else "—"])
         _table(pdf, rows, widths=[90, 40, 50])
+        if d.windows_in_destroyed_share:
+            _p(pdf, f"Обсяг вікон включає віконні прорізи у зруйнованих стінах: за оцінкою моделі "
+                    f"{d.windows_in_destroyed_share:.0%} площі пошкоджень фасаду (сегментація позначає їх як "
+                    f"пошкодження фасаду).")
     if k:
         pdf.set_font("dejavu", "B", 11)
         pdf.multi_cell(0, 6, f"Орієнтовна вартість: від {_uah(k.low)} до {_uah(k.high)}", new_x="LMARGIN",
