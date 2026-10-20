@@ -91,6 +91,9 @@ def evaluate(seg: Segmentation,
             building = building_estimator.estimate([seg.images[i] for i in ids], [seg.masks[i] for i in ids])
             log.info("building parameters estimated: %s", building)
         except Exception as e:   # a failed step is reported, the rest of the report is still produced
+            if getattr(e, "pending", False):    # answer requested from a subagent: the decision needs it
+                report.errors.append(f"building parameters: {e}")
+                return report
             log.exception("building parameters failed")
             report.errors.append(f"building parameters: {e}")
     report.building = building
@@ -105,7 +108,8 @@ def evaluate(seg: Segmentation,
             report.decision = decision_layer.decide(report.ratios, report.areas, report.building, views=views)
             log.info("decision: %s", report.decision)
         except Exception as e:
-            log.exception("decision layer failed")
+            if not getattr(e, "pending", False):
+                log.exception("decision layer failed")
             report.errors.append(f"decision layer: {e}")
 
     if price_source is not None and report.decision is not None:

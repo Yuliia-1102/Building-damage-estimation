@@ -60,6 +60,22 @@ uv run python -m tools.cvat ../Dataset_CVAT/annotations.xml data/cvat_masks
 uv run python cli.py data/cases/<case> --masks data/cvat_masks
 ```
 
+## Developing with Claude instead of Gemini
+
+While the system is being developed, Claude subagents can stand in for Gemini so that test runs and prompt
+changes cost nothing from the Gemini budget (`models/claude_bridge.py`, `tools/claude_bridge.py`):
+
+```bash
+uv run python -m tools.run_testset testset/cases.csv --claude   # requests not in the cache -> output/claude_requests/
+uv run python -m tools.claude_bridge list                        # what waits for an answer
+#   a subagent per folder: tools.claude_bridge prompt <folder> gives its task; it writes answer.json
+uv run python -m tools.claude_bridge import                      # validated against the same schemas, then cached
+```
+
+Repeat until nothing is pending (building parameters first, then decisions). `DAMAGE_LLM=claude-sonnet-5-5`
+does the same for the UI in offline mode. Answers are cached under the model name, so Claude and Gemini
+answers never mix; final tests and the app use Gemini.
+
 ## Cache
 
 Masks are cached in `cache/masks/` by the content hash of the photo, and decision-layer answers in

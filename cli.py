@@ -86,8 +86,9 @@ def print_text(r: Report) -> None:
 
 
 def to_json(r: Report) -> str:
-    d = dataclasses.asdict(dataclasses.replace(r, masks={}))
+    d = dataclasses.asdict(dataclasses.replace(r, masks={}, excluded={}))
     d.pop("masks")
+    d.pop("excluded")
     return json.dumps(d, indent=2, ensure_ascii=False, default=list)
 
 

@@ -26,10 +26,17 @@ def make_client():
     return genai.Client()
 
 
+def llm_model(kind: str) -> str:
+    """The model for 'decision' or 'building'. DAMAGE_LLM (e.g. claude-sonnet-5-5) overrides both while the
+    system is developed with Claude subagents instead of Gemini (models/claude_bridge.py)."""
+    return os.environ.get("DAMAGE_LLM") or config.get("decision", "model" if kind == "decision" else "building_model")
+
+
 class GeminiJSON:
     def __init__(self, client=None, model: str | None = None, retries: int = 2, use_cache: bool = True):
-        self.client = client or make_client()
-        self.model = model or config.get("decision", "model")
+        self.model = model or llm_model("decision")
+        self.bridge = self.model.startswith("claude-")      # no API: requests go to subagents through files
+        self.client = client or (None if self.bridge else make_client())
         self.retries = retries
         self.use_cache = use_cache
         self.last_from_cache: bool | None = None    # whether the last answer came from the cache (no request)
@@ -89,6 +96,10 @@ class GeminiJSON:
             self.last_from_cache = True
             return schema.model_validate(hit)
         self.last_from_cache = False
+        if self.bridge and self.client is None:
+            from models.claude_bridge import AnswerPending, export
+            folder = export(self.model, namespace, key, contents, schema, system)
+            raise AnswerPending(f"waiting for a {self.model} answer: {folder.name}")
 
         last_error = None
         for attempt in range(1, self.retries + 2):

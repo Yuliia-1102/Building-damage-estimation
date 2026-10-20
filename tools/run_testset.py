@@ -36,6 +36,7 @@ from core.case import case_from_paths, case_from_video
 from core.output import save_views
 from core.pipeline import evaluate, segment_case
 from core.video import VIDEO_EXTS
+from models.gemini_client import llm_model
 from models.price_source import default_price_source
 
 log = logging.getLogger("testset")
@@ -84,8 +85,9 @@ def answer_source(layer) -> str:
 
 
 def report_json(report) -> str:
-    d = dataclasses.asdict(dataclasses.replace(report, masks={}))
+    d = dataclasses.asdict(dataclasses.replace(report, masks={}, excluded={}))
     d.pop("masks")
+    d.pop("excluded")
     return json.dumps(d, indent=2, ensure_ascii=False, default=list)
 
 
@@ -163,6 +165,9 @@ def main() -> None:
                    help="send paid Gemini requests; without it only cached answers are used, stubs otherwise")
     p.add_argument("--only", nargs="*", help="case ids to run")
     p.add_argument("--decision-model", help="decision model for this run instead of config.toml (comparisons)")
+    p.add_argument("--claude", action="store_true",
+                   help="Claude subagents instead of Gemini (DAMAGE_LLM, default claude-sonnet-5-5): requests not in "
+                        "the cache are exported for tools/claude_bridge.py, nothing is sent or paid")
     p.add_argument("--no-views", action="store_true", help="do not save masks and overlays")
     args = p.parse_args()
 
@@ -175,7 +180,9 @@ def main() -> None:
 
     from dotenv import load_dotenv
     load_dotenv(config.ROOT / ".env")
-    use_llm = args.gemini and bool(os.environ.get("GEMINI_API_KEY")) and not args.stub
+    if args.claude:
+        os.environ.setdefault("DAMAGE_LLM", "claude-sonnet-5-5")
+    use_llm = (args.claude or (args.gemini and bool(os.environ.get("GEMINI_API_KEY")))) and not args.stub
     if args.stub:
         from models.stub import StubSegmenter
         segmenter = StubSegmenter()
@@ -270,8 +277,7 @@ def main() -> None:
     manifest = {
         "started": start.isoformat(timespec="seconds"), "finished": datetime.now().isoformat(timespec="seconds"),
         "git": git_state(), "args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
-        "models": {"building": config.get("decision", "building_model"),
-                   "decision": args.decision_model or config.get("decision", "model")},
+        "models": {"building": llm_model("building"), "decision": args.decision_model or llm_model("decision")},
         "price_source": config.get("prices", "source"), "usage": usage_totals(usage),
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
