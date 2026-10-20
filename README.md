@@ -7,7 +7,7 @@ only - it orders buildings for on-site inspection and does not replace it.
 
 ## Setup
 
-Requires [uv](https://docs.astral.sh/uv/). Python 3.12 is pinned in `.python-version`.
+Requires [uv](https://docs.astral.sh/uv/) (py -m pip install uv in PowerShell). Python 3.12 is pinned in `.python-version`.
 
 ```bash
 uv sync                 # core dependencies + pytest
