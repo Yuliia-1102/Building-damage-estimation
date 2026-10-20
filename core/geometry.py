@@ -15,9 +15,12 @@ def roof_area(width_m: float, depth_m: float, shape_coef: float) -> float:
 
 
 def visible_wall_area(frames, height_m: float, all_walls: float) -> float:
-    """Wall area seen in the views: each usable view shows a facade (aspect x height) wide and height high.
-    Summed over the views and capped at all walls, since views of the same side overlap."""
-    seen = sum(f.facade_aspect * height_m * height_m for f in frames if f.facade_usable and f.facade_aspect)
+    """Wall area seen in the views: the facade pixels of each usable view times its metres per pixel squared
+    (height in metres / building height in pixels). Not the bounding rectangle, which in a corner view also
+    counts the sky and the yard between two wings. Summed over the views and capped at all walls, since views
+    of the same side overlap. Perspective still makes the far parts of a facade count a little less."""
+    seen = sum(f.facade_px * (height_m / f.facade_height_px) ** 2
+               for f in frames if f.facade_usable and f.facade_height_px)
     return min(seen, all_walls) if seen else all_walls
 
 

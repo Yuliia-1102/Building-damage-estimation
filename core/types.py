@@ -54,7 +54,8 @@ class FrameMetrics:
     damage_by_third: list[int] = field(default_factory=lambda: [0, 0, 0])
     # damage share of the worst vertical section of the facade (one of N equal parts of its width)
     worst_section: float | None = None
-    facade_aspect: float | None = None      # facade width / height in pixels (visible wall width = aspect x height)
+    facade_aspect: float | None = None      # facade width / height in pixels (facade width = aspect x height)
+    facade_height_px: float | None = None   # building height in pixels: height in metres / this = metres per pixel
 
 
 @dataclass
