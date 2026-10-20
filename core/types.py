@@ -54,6 +54,7 @@ class FrameMetrics:
     damage_by_third: list[int] = field(default_factory=lambda: [0, 0, 0])
     # damage share of the worst vertical section of the facade (one of N equal parts of its width)
     worst_section: float | None = None
+    facade_aspect: float | None = None      # facade width / height in pixels (visible wall width = aspect x height)
 
 
 @dataclass
@@ -108,11 +109,12 @@ class BuildingParams:
 
 @dataclass
 class DamagedAreas:
-    wall_area_m2: float
-    roof_area_m2: float
-    damaged_facade_m2: float | None
+    wall_area_m2: float                 # all walls: perimeter x height
+    roof_area_m2: float | None          # None when the roof was not assessed
+    damaged_facade_m2: float | None     # share of damage x VISIBLE wall area
     broken_window_m2: float | None
     damaged_roof_m2: float | None
+    visible_wall_area_m2: float | None = None   # walls seen in the views; damage is measured only there
 
 
 # ---------- decision layer and cost (epic 6) ----------
@@ -187,3 +189,4 @@ class Report:
     skipped_frames: dict[int, str] = field(default_factory=dict)   # view_id -> error
     errors: list[str] = field(default_factory=list)                # steps that failed, shown in the report
     masks: dict[int, np.ndarray] = field(default_factory=dict, repr=False)
+    excluded: dict[int, np.ndarray] = field(default_factory=dict, repr=False)   # other buildings in the frame

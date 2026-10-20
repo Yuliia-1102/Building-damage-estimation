@@ -107,9 +107,11 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
                   f"  structure type: {building.structure_type or 'unknown'}",
                   f"  roof type: {building.roof_type or 'unknown'}"]
     if areas is not None:
-        lines.append(f"  areas: walls {_m2(areas.wall_area_m2)}, roof {_m2(areas.roof_area_m2)}; "
-                     f"damaged facade {_m2(areas.damaged_facade_m2)}, broken windows "
-                     f"{_m2(areas.broken_window_m2)}, damaged roof {_m2(areas.damaged_roof_m2)}")
+        seen = areas.visible_wall_area_m2 or areas.wall_area_m2
+        lines.append(f"  walls seen in the views: {_m2(seen)} of {_m2(areas.wall_area_m2)} in all "
+                     f"({seen / areas.wall_area_m2:.0%}); damage is measured on the walls seen only")
+        lines.append(f"  damaged areas: facade {_m2(areas.damaged_facade_m2)}, broken windows "
+                     f"{_m2(areas.broken_window_m2)}, roof {_m2(areas.damaged_roof_m2)}")
 
     lines += [
         "",

@@ -2,14 +2,82 @@
 
 Segmentation gives pixels; one real size is needed to turn them into metres. That size is the height
 (floors x floor height, or a reference object). Scale = height in metres / height in pixels, then
-width = width in pixels x scale. Depth cannot be seen in a frontal view and is assumed equal to width.
+width = width in pixels x scale. Depth: in a set of views from different sides, the narrowest facade is
+the end wall; with fewer views it cannot be seen and is assumed equal to width.
+
+Everything here works on the main building only (main_building): the segmentation marks every building
+in the frame, and a neighbour would otherwise be measured as part of ours.
 """
+from collections import deque
+
 import numpy as np
+from PIL import Image
 
 from core import config
 from core.types import Cls
 
 FACADE_CLASSES = [Cls.FACADE, Cls.DAMAGED_FACADE, Cls.BROKEN_WINDOW]
+
+
+def _components(grid: np.ndarray) -> np.ndarray:
+    """4-connected labels of a small boolean grid (0 = none). Plain BFS: the grid is ~200 px wide."""
+    labels = np.zeros(grid.shape, np.int32)
+    h, w = grid.shape
+    n = 0
+    for y, x in zip(*np.nonzero(grid)):
+        if labels[y, x]:
+            continue
+        n += 1
+        labels[y, x] = n
+        queue = deque([(y, x)])
+        while queue:
+            cy, cx = queue.popleft()
+            for ny, nx in ((cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1)):
+                if 0 <= ny < h and 0 <= nx < w and grid[ny, nx] and not labels[ny, nx]:
+                    labels[ny, nx] = n
+                    queue.append((ny, nx))
+    return labels
+
+
+def main_building(mask: np.ndarray, grid: int | None = None, gap: float | None = None) -> np.ndarray:
+    """Boolean mask of the building being assessed: the largest connected building region, favouring the
+    one nearer the centre of the frame. Parts closer than `gap` (share of the frame size) are joined first,
+    so a building split by a collapse or a tree stays one building. Other buildings are left out."""
+    grid = grid or config.get("geometry", "main_building_grid")
+    gap = gap if gap is not None else config.get("geometry", "main_building_gap")
+    building = mask > 0
+    if not building.any():
+        return building
+    h, w = mask.shape
+    scale = grid / max(h, w)
+    gh, gw = max(1, round(h * scale)), max(1, round(w * scale))
+    small = np.asarray(Image.fromarray(building.astype(np.uint8) * 255).resize((gw, gh), Image.BOX)) > 32
+    r = max(1, round(gap * grid / 2))
+    grown = small.copy()                      # dilate by r cells: gaps up to 2r are bridged
+    for _ in range(r):
+        g = grown.copy()
+        g[1:, :] |= grown[:-1, :]
+        g[:-1, :] |= grown[1:, :]
+        g[:, 1:] |= grown[:, :-1]
+        g[:, :-1] |= grown[:, 1:]
+        grown = g
+    labels = _components(grown)
+    if labels.max() <= 1:
+        return building
+    ys, xs = np.indices(labels.shape)
+    centre, half_diag = np.array([gh / 2, gw / 2]), np.hypot(gh, gw) / 2
+    best, best_score = 0, -1.0
+    for n in range(1, labels.max() + 1):
+        part = (labels == n) & small
+        area = part.sum()
+        if area == 0:
+            continue
+        dist = np.hypot(ys[part].mean() - centre[0], xs[part].mean() - centre[1]) / half_diag
+        score = area * (1 - 0.5 * dist)
+        if score > best_score:
+            best, best_score = n, score
+    keep = np.asarray(Image.fromarray((labels == best).astype(np.uint8) * 255).resize((w, h), Image.NEAREST)) > 0
+    return building & keep
 
 
 def facade_extent_px(mask: np.ndarray, percentile: float | None = None) -> tuple[float, float]:
@@ -34,6 +102,25 @@ def frames_for_floors(masks: list[np.ndarray]) -> list[int]:
     """Frame indices, the one showing the most facade first: floors are counted on it (task 4.2.2).
     The next ones are tried when the floors cannot be read on the first (a close-up of a wall, say)."""
     return [int(i) for i in np.argsort([-np.isin(m, FACADE_CLASSES).mean() for m in masks], kind="stable")]
+
+
+def facade_aspect(mask: np.ndarray) -> float | None:
+    """Facade width / facade height in pixels: times the building height it gives the facade width in metres
+    seen in this view, whatever the distance of the camera."""
+    h_px, w_px = facade_extent_px(mask)
+    return w_px / h_px if h_px > 0 else None
+
+
+def depth_from_views(masks: list[np.ndarray], height_m: float, width_m: float) -> float | None:
+    """Depth from views of different sides: the narrowest facade among them is taken as the end wall.
+    None when there are fewer than [geometry] depth_min_views views showing enough facade."""
+    min_share = config.get("suitability", "min_facade_share")
+    widths = [a * height_m for m in masks
+              if np.isin(m, FACADE_CLASSES).mean() >= min_share and (a := facade_aspect(m))]
+    if len(widths) < config.get("geometry", "depth_min_views"):
+        return None
+    # a view cut off at the frame edge also looks narrow: never below a third of the width
+    return max(min(min(widths), width_m), width_m / 3)
 
 
 def best_frame_for_floors(masks: list[np.ndarray]) -> int:

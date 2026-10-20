@@ -2,6 +2,7 @@
 import numpy as np
 
 from core import config
+from core.building import facade_aspect
 from core.types import NUM_CLASSES, Cls, CombinedRatios, FrameMetrics
 
 
@@ -91,6 +92,7 @@ def frame_metrics(view_id: int, mask: np.ndarray,
         excluded_reasons=reasons,
         damage_by_third=damage_by_third(mask),
         worst_section=worst_section(mask),
+        facade_aspect=facade_aspect(mask),
     )
 
 

@@ -53,7 +53,7 @@ def main() -> None:
     edited = copy.deepcopy(r.building)
     edited.floors = r.building.floors + 1
     masks = [seg.masks[f.view_id] for f in seg.frames]
-    edited = recompute(edited, masks[edited.source_frame], {"floors"})
+    edited = recompute(edited, masks[edited.source_frame], {"floors"}, masks)
     r = evaluate(seg, building=edited, decision_layer=decision, price_source=prices())
     print(line("video, floors +1", r), "| decision", source(decision), flush=True)
 

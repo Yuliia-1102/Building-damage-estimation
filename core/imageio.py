@@ -29,11 +29,16 @@ def colorize(mask: np.ndarray) -> np.ndarray:
     return PALETTE[mask]
 
 
-def overlay(image: np.ndarray, mask: np.ndarray, alpha: float = 0.4) -> np.ndarray:
-    """Mask drawn over the photo, translucent so the photo stays visible under it; background left untouched."""
+def overlay(image: np.ndarray, mask: np.ndarray, alpha: float = 0.4,
+            excluded: np.ndarray | None = None) -> np.ndarray:
+    """Mask drawn over the photo, translucent so the photo stays visible under it; background left untouched.
+    excluded: other buildings in the frame, greyed out to show they were not assessed."""
     out = image.astype(np.float32)
     fg = mask != Cls.BACKGROUND
     out[fg] = (1 - alpha) * out[fg] + alpha * colorize(mask)[fg]
+    if excluded is not None and excluded.any():
+        grey = out[excluded].mean(axis=1, keepdims=True)
+        out[excluded] = 0.35 * grey + 0.65 * 150
     return out.astype(np.uint8)
 
 

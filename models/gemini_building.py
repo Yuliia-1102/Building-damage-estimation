@@ -96,6 +96,7 @@ class GeminiBuildingEstimator:
         if len(tried) > 1:
             p.assumptions.append(f"floors read on frame {i + 1}; not readable on frame(s) "
                                  f"{', '.join(str(t + 1) for t in tried[:-1])}")
+        set_depth(p, masks)
         return p
 
 
@@ -136,12 +137,30 @@ def params_from_answer(answer: BuildingResponse, mask: np.ndarray, crop_height: 
     if p.height_m is not None:
         p.width_m, _ = geom.width_from_height(mask, p.height_m)
         p.depth_m = p.width_m
-        p.assumptions.append("depth assumed equal to width (no corner view used)")
+        p.assumptions.append(DEPTH_ASSUMED)
     p.occupants_estimate, p.consequence_class = geom.consequence_class(p.floors, p.width_m, p.depth_m)
     return p
 
 
-def recompute(p: BuildingParams, mask: np.ndarray, changed: set[str]) -> BuildingParams:
+DEPTH_ASSUMED = "depth assumed equal to width (no corner view used)"
+DEPTH_MEASURED = "depth measured on the narrowest of the views (the end wall)"
+
+
+def set_depth(p: BuildingParams, masks: list[np.ndarray]) -> None:
+    """Depth from views of several sides when there are enough of them, otherwise equal to the width."""
+    if p.width_m is None or p.height_m is None:
+        return
+    for note in (DEPTH_ASSUMED, DEPTH_MEASURED):
+        if note in p.assumptions:
+            p.assumptions.remove(note)
+    depth = geom.depth_from_views(masks, p.height_m, p.width_m)
+    p.depth_m = depth if depth is not None else p.width_m
+    p.assumptions.append(DEPTH_MEASURED if depth is not None else DEPTH_ASSUMED)
+    p.occupants_estimate, p.consequence_class = geom.consequence_class(p.floors, p.width_m, p.depth_m)
+
+
+def recompute(p: BuildingParams, mask: np.ndarray, changed: set[str],
+              masks: list[np.ndarray] | None = None) -> BuildingParams:
     """After the user edits a field (task 4.5): fields they changed are kept and no longer marked automatic;
     width and depth are re-derived from the new height unless the user set them too."""
     p.auto_detected -= changed
@@ -149,7 +168,7 @@ def recompute(p: BuildingParams, mask: np.ndarray, changed: set[str]) -> Buildin
     if p.height_m is not None and "width_m" not in changed:
         p.width_m, _ = geom.width_from_height(mask, p.height_m)
     if p.width_m is not None and "depth_m" not in changed:
-        p.depth_m = p.width_m
+        set_depth(p, masks or [mask])
     if "roof_type" in changed:
         p.roof_shape_coef = config.get("geometry", "roof_shape_coef_pitched" if p.roof_type == "pitched"
                                        else "roof_shape_coef_flat")

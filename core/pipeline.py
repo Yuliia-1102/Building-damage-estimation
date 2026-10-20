@@ -11,6 +11,7 @@ from typing import Callable
 import numpy as np
 
 from core import geometry, metrics
+from core.building import main_building
 from core.imageio import load_image
 from core.interfaces import BuildingParamsEstimator, DecisionLayer, PriceSource, SegmentationModel
 from core.types import BuildingParams, Case, FrameMetrics, Report, View
@@ -24,7 +25,8 @@ Progress = Callable[[int, int, str], None]   # (done, total, what is happening)
 class Segmentation:
     case: Case
     images: dict[int, np.ndarray] = field(default_factory=dict, repr=False)
-    masks: dict[int, np.ndarray] = field(default_factory=dict, repr=False)
+    masks: dict[int, np.ndarray] = field(default_factory=dict, repr=False)     # main building only
+    excluded: dict[int, np.ndarray] = field(default_factory=dict, repr=False)  # other buildings, not assessed
     frames: list[FrameMetrics] = field(default_factory=list)
     skipped: dict[int, str] = field(default_factory=dict)     # view_id -> error
 
@@ -52,6 +54,10 @@ def segment_case(case: Case, segmenter: SegmentationModel, progress: Progress | 
             log.warning("view %d (%s) skipped: %s", view.view_id, view.image_path.name, e)
             seg.skipped[view.view_id] = str(e)
             continue
+        # only the building being assessed: neighbours in the frame are not measured (core/building.py)
+        main = main_building(mask)
+        seg.excluded[view.view_id] = (mask > 0) & ~main
+        mask = np.where(main, mask, 0).astype(mask.dtype)
         seg.images[view.view_id] = image
         seg.masks[view.view_id] = mask
         seg.frames.append(metrics.frame_metrics(view.view_id, mask))
@@ -75,6 +81,7 @@ def evaluate(seg: Segmentation,
         ratios=metrics.combine(seg.frames),
         skipped_frames=seg.skipped,
         masks=seg.masks,
+        excluded=seg.excluded,
     )
     log.info("combined ratios: %s", report.ratios)
 
@@ -89,7 +96,7 @@ def evaluate(seg: Segmentation,
     report.building = building
 
     if building is not None and building.width_m is not None and building.height_m is not None:
-        report.areas = geometry.damaged_areas(report.ratios, building)
+        report.areas = geometry.damaged_areas(report.ratios, building, seg.frames)
         log.info("damaged areas: %s", report.areas)
 
     if decision_layer is not None and seg.frames:

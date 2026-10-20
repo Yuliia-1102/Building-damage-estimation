@@ -25,11 +25,23 @@ LEGEND_UA = {"background": "фон", "facade": "фасад", "roof": "дах", "
 
 ASSUMPTIONS_UA = {
     "depth assumed equal to width (no corner view used)":
-        "глибину прийнято рівною ширині: зі знімків вимірюється лише ширина фасаду; виправте, якщо відома",
+        "глибину прийнято рівною ширині: торця будівлі не видно на знімках; виправте, якщо відома",
+    "depth measured on the narrowest of the views (the end wall)":
+        "глибину виміряно за найвужчим видом (торець будівлі)",
     "roof type unknown, flat roof assumed": "тип даху невідомий, прийнято плаский",
     "floors not readable and no reference object: dimensions unknown, enter them":
         "поверхи не читаються і немає еталонного об'єкта: розміри невідомі, введіть їх",
 }
+
+
+def walls_seen_ua(a, fmt) -> str:
+    """'1 200 м² з 4 170 м² (29%) — пошкодження оцінено лише на видимих стінах; інші сторони не оцінено'."""
+    seen = a.visible_wall_area_m2 or a.wall_area_m2
+    share = seen / a.wall_area_m2 if a.wall_area_m2 else 1
+    text = f"{fmt(seen, ' м²')} з {fmt(a.wall_area_m2, ' м²')} усіх стін ({share:.0%})"
+    if share < 0.9:
+        text += " — пошкодження і вартість пораховано лише для видимих стін; інші сторони не оцінено"
+    return text
 
 
 def assumption_ua(text: str) -> str:
@@ -174,12 +186,13 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         _h(pdf, "1. Будівля і маски пошкоджень")
         _sub(pdf, "Кольори масок")
         _legend(pdf)
+        _p(pdf, "Сірим позначено інші будівлі в кадрі: вони не оцінюються.")
         # two views per row, 88 mm wide each
         shown = [(v, im) for v, im in list(images.items())[:6] if report.masks.get(v) is not None]
         for row in range(0, len(shown), 2):
             pair = []
             for view_id, image in shown[row:row + 2]:
-                im = Image.fromarray(overlay(image, report.masks[view_id]))
+                im = Image.fromarray(overlay(image, report.masks[view_id], excluded=report.excluded.get(view_id)))
                 im.thumbnail((900, 900))
                 buf = io.BytesIO()
                 im.save(buf, format="JPEG", quality=85)
@@ -247,7 +260,9 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
                       f"нижні поверхи {low:.0%}, середні {mid:.0%}, верхні {up:.0%} усіх пошкоджень фасаду. "
                       f"Руйнування нижніх поверхів небезпечніше для всієї будівлі (ДСТУ 9273, п. 11.26)."))
     if a:
-        extra.append(("Площа стін / даху", f"{_num(a.wall_area_m2, ' м²')} / {_num(a.roof_area_m2, ' м²')}"))
+        extra.append(("Оцінені стіни", walls_seen_ua(a, _num)))
+        if a.roof_area_m2 is not None:
+            extra.append(("Площа даху", _num(a.roof_area_m2, " м²")))
     if r.roof_partly_seen:
         extra.append(("Дах", "видно лише смугою, оцінка приблизна"))
     if r.broken_window is not None and r.broken_window < 0.03 and (r.damaged_facade or 0) > 0.3:

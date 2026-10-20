@@ -31,7 +31,8 @@ from core.imageio import LEGEND, overlay  # noqa: E402
 from core.pipeline import evaluate, segment_case  # noqa: E402
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA,  # noqa: E402
                             DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, WORK_NAMES_UA)
-from core.report_pdf import STUB_UA, COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf  # noqa: E402
+from core.report_pdf import (STUB_UA, COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf,  # noqa: E402
+                             walls_seen_ua)
 
 st.set_page_config(page_title="Оцінка пошкоджень будівлі", page_icon="🏚️", layout="wide")
 
@@ -158,7 +159,7 @@ def recalculate(changes: dict) -> None:
         setattr(building, k, v)
     masks = [seg.masks[f.view_id] for f in seg.frames]
     frame = building.source_frame if building.source_frame is not None else best_frame_for_floors(masks)
-    building = recompute(building, masks[frame], set(changes))
+    building = recompute(building, masks[frame], set(changes), masks)
     t = time.perf_counter()
     report = evaluate(seg, building=building, decision_layer=decision_layer, price_source=get_prices())
     st.session_state.update(report=report, pdf=None, recalc_time=time.perf_counter() - t)
@@ -252,7 +253,8 @@ def views_section(report, seg):
                    f"у кожному перевірено кандидатів (усього {info['checked']}) і взято кадр, де будівлю видно "
                    f"найкраще: обрано {info['selected']} видів з різних сторін.")
     c1, c2 = st.columns([3, 1], vertical_alignment="center")
-    c1.markdown(legend_html(), unsafe_allow_html=True)
+    c1.markdown(legend_html() + "<div class='muted'>Сірим — інші будівлі в кадрі: вони не оцінюються.</div>",
+                unsafe_allow_html=True)
     show_mask = c2.toggle("Показувати маску", value=True)
     for vid, err in report.skipped_frames.items():
         st.error(f"Вид {vid} пропущено: {err}")
@@ -263,7 +265,8 @@ def views_section(report, seg):
         for col, f in zip(cols, frames[row:row + 2]):
             with col.container(border=True):
                 img = seg.images[f.view_id]
-                st.image(overlay(img, seg.masks[f.view_id]) if show_mask else img, width="stretch")
+                st.image(overlay(img, seg.masks[f.view_id], excluded=seg.excluded.get(f.view_id)) if show_mask
+                         else img, width="stretch")
                 tag = " · найгірший вид" if f.view_id in worst else ""
                 damaged = None if f.damaged_facade_ratio is None else f.damaged_facade_ratio + f.broken_window_ratio
                 st.markdown(f"**Вид {f.view_id}**{tag}  \n"
@@ -356,7 +359,7 @@ def damage_section(report):
         notes.append(f"По висоті: нижні поверхи {low:.0%}, середні {mid:.0%}, верхні {up:.0%} усіх пошкоджень "
                      f"фасаду (руйнування нижніх поверхів небезпечніше, ДСТУ 9273, п. 11.26).")
     if a:
-        notes.append(f"Площа стін {num(a.wall_area_m2, ' м²')}, даху {num(a.roof_area_m2, ' м²')}.")
+        notes.append("Оцінені стіни: " + walls_seen_ua(a, num) + ".")
     if notes:
         st.caption(" ".join(notes))
 
