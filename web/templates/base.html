@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Операторська система{% endblock %}</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.4/htmx.min.js"></script>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/board">🏚️ Оцінка пошкоджень</a>
+    <nav>
+      <a href="/board" class="{% block nav_board %}{% endblock %}">Дошка</a>
+      <a href="/projects" class="{% block nav_projects %}{% endblock %}">Проєкти</a>
+      <a href="/statistics" class="{% block nav_stats %}{% endblock %}">Статистика</a>
+    </nav>
+    <a class="btn btn-primary" href="/applications/new">+ Нова заявка</a>
+  </header>
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

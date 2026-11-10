@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Проєкти{% endblock %}
+{% block nav_projects %}active{% endblock %}
+{% block content %}
+<h1>Проєкти</h1>
+
+<form class="panel" method="post" action="/projects">
+  <h2>Новий проєкт</h2>
+  <div class="row">
+    <div><label>Назва *</label><input type="text" name="name" required placeholder="напр. вул. Шевченка"></div>
+    <div><label>Опис</label><input type="text" name="description" placeholder="необов'язково"></div>
+    <div style="display:flex;align-items:flex-end;max-width:140px"><button class="btn btn-primary">Створити</button></div>
+  </div>
+</form>
+
+{% if projects %}
+<div class="panel">
+  <table>
+    <thead><tr><th>Проєкт</th><th>Опис</th><th>Заявок</th></tr></thead>
+    <tbody>
+    {% for p in projects %}
+      <tr>
+        <td><a href="/projects/{{ p.id }}">{{ p.name }}</a></td>
+        <td class="muted">{{ p.description or '' }}</td>
+        <td>{{ counts[p.id] }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty">Проєктів ще немає.</div>
+{% endif %}
+{% endblock %}

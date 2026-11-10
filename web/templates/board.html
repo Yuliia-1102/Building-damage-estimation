@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Дошка заявок{% endblock %}
+{% block nav_board %}active{% endblock %}
+{% block content %}
+<h1>Дошка заявок</h1>
+
+<form class="filters" method="get" action="/board">
+  <div class="f">
+    <label>Пошук за назвою</label>
+    <input type="text" name="query" value="{{ raw.get('query','') }}" placeholder="вулиця, об'єкт…">
+  </div>
+  <div class="f">
+    <label>Категорія</label>
+    <select name="damage_category">
+      <option value="">усі</option>
+      {% for c in ['I','II','III'] %}
+      <option value="{{ c }}" {% if raw.get('damage_category')==c %}selected{% endif %}>{{ c }} — {{ DAMAGE_NAMES_UA[c] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="f">
+    <label>Технічний стан</label>
+    <select name="condition_category">
+      <option value="">усі</option>
+      {% for n in [1,2,3,4] %}
+      <option value="{{ n }}" {% if raw.get('condition_category')== (n|string) %}selected{% endif %}>{{ n }} — {{ CONDITION_NAMES_UA[n] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="f">
+    <label>Впевненість</label>
+    <select name="escalation">
+      <option value="">усі</option>
+      {% for k,v in {'confirmed':'висока','preliminary':'середня','insufficient_data':'недостатньо'}.items() %}
+      <option value="{{ k }}" {% if raw.get('escalation')==k %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="f">
+    <label>Проєкт</label>
+    <select name="project_id">
+      <option value="">усі</option>
+      {% for p in projects %}
+      <option value="{{ p.id }}" {% if raw.get('project_id')== (p.id|string) %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="f" style="max-width:110px">
+    <label>Вартість від, тис.</label>
+    <input type="number" name="cost_min" min="0" value="{{ raw.get('cost_min','') }}">
+  </div>
+  <div class="f" style="max-width:110px">
+    <label>до, тис.</label>
+    <input type="number" name="cost_max" min="0" value="{{ raw.get('cost_max','') }}">
+  </div>
+  <div class="f" style="max-width:150px">
+    <label>Створено від</label>
+    <input type="date" name="date_from" value="{{ raw.get('date_from','') }}">
+  </div>
+  <div class="f" style="max-width:150px">
+    <label>до</label>
+    <input type="date" name="date_to" value="{{ raw.get('date_to','') }}">
+  </div>
+  <div class="f check" style="max-width:170px">
+    <input type="checkbox" id="sim" name="show_simulated" value="1" {% if filters.show_simulated %}checked{% endif %}>
+    <label for="sim" style="margin:0">показувати симульовані</label>
+  </div>
+  <div class="f" style="max-width:120px">
+    <button class="btn btn-primary" type="submit">Застосувати</button>
+  </div>
+  <div class="f" style="max-width:90px">
+    <a class="btn btn-ghost" href="/board">Скинути</a>
+  </div>
+</form>
+
+<p class="muted small">Знайдено заявок: {{ total }}{% if not filters.show_simulated %} (симульовані приховано){% endif %}.</p>
+
+<div class="board">
+  {% for status in Status.BOARD %}
+  <div class="col">
+    <h3>{{ UA_STATUS[status] }} <span class="count">{{ columns[status]|length }}</span></h3>
+    {% for app in columns[status] %}
+      {% include "partials/card.html" %}
+    {% else %}
+      <div class="ptext" style="padding:.4rem .2rem">—</div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

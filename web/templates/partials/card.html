@@ -1,0 +1,23 @@
+<a class="card" href="/applications/{{ app.id }}">
+  <div class="ct">№{{ app.id }} · {{ app.title }}</div>
+  <div class="badges">
+    {% if app.simulated %}<span class="badge sim">симуляція</span>{% endif %}
+    {% if app.is_duplicate %}<span class="badge dup">дублікат №{{ app.duplicate_of_id }}</span>{% endif %}
+    {% if app.has_assessment and app.damage_category %}
+      <span class="badge cat-{{ app.damage_category }}">Кат. {{ app.damage_category }}</span>
+      {% if app.condition_category %}<span class="badge cond">стан {{ app.condition_category }}</span>{% endif %}
+      {% if app.cost_low %}<span class="badge cost">{{ app.cost_low|money_short }}–{{ app.cost_high|money_short }} грн</span>{% endif %}
+    {% elif app.status == Status.PROCESSED and app.has_assessment is false %}
+      <span class="badge noassess">недостатньо даних</span>
+    {% endif %}
+  </div>
+  {% if app.status in (Status.CREATED, Status.PROCESSING) and app.queued_at %}
+    <div class="bar"><span style="width: {{ (app.progress * 100)|round(0, 'floor') }}%"></span></div>
+    {% if app.progress_text %}<div class="ptext">{{ app.progress_text }}</div>{% endif %}
+  {% endif %}
+  <div class="meta">
+    <span>{{ {'photo':'1 фото','photos':'кілька фото','video':'відео'}.get(app.mode, app.mode or '—') }}</span>
+    {% if app.project %}<span>· {{ app.project.name }}</span>{% endif %}
+    <span>· {{ app.created_at|dt }}</span>
+  </div>
+</a>

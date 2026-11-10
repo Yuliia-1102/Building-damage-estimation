@@ -21,8 +21,8 @@ import time
 from pathlib import Path
 
 from core import config
-from core.service import (InputError, Progress, RecordedDecision, describe_inputs, input_mode, load_result,
-                          save_result)
+from core.service import (InputError, Progress, RecordedDecision, _delay, describe_inputs, input_mode,
+                          load_result, save_result)
 
 log = logging.getLogger(__name__)
 

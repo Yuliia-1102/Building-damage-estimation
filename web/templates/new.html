@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Нова заявка{% endblock %}
+{% block content %}
+<h1>Нова заявка</h1>
+{% if error %}<div class="notice err">{{ error }}</div>{% endif %}
+
+<form class="panel" method="post" action="/applications" enctype="multipart/form-data">
+  <label>Назва або адреса об'єкта *</label>
+  <input type="text" name="title" required placeholder="напр. вул. Шевченка, 12">
+
+  <div class="row">
+    <div>
+      <label>Проєкт</label>
+      <select name="project_id">
+        <option value="">— без проєкту —</option>
+        {% for p in projects %}
+        <option value="{{ p.id }}" {% if project_id and project_id|string == p.id|string %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <label>Коментар</label>
+  <textarea name="comment" placeholder="необов'язково"></textarea>
+
+  <label>Файли *</label>
+  <input type="file" name="files" multiple required
+         accept=".jpg,.jpeg,.png,.webp,.mp4,.mov,.avi,.mkv,.webm">
+  <div class="hint">Одне фото, кілька фото або одне відео (до {{ max_mb }} МБ). Відео та фото разом не можна.</div>
+
+  <div style="margin-top:1rem">
+    <button class="btn btn-primary" type="submit">Створити заявку</button>
+    <a class="btn btn-ghost" href="/board">Скасувати</a>
+  </div>
+</form>
+{% endblock %}

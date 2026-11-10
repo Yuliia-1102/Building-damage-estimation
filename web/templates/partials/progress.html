@@ -1,0 +1,12 @@
+{% if done %}
+<div hx-get="/applications/{{ app.id }}/progress" hx-trigger="load delay:300ms" hx-target="body" hx-select="main" hx-swap="outerHTML">
+  <div class="notice info">Оброблено. Оновлюємо сторінку…</div>
+</div>
+{% else %}
+<div class="panel" id="progress-box"
+     hx-get="/applications/{{ app.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML">
+  <h2>{{ app.status_ua }}</h2>
+  <div class="bar"><span style="width: {{ (app.progress * 100)|round(0, 'floor') }}%"></span></div>
+  <div class="ptext">{{ app.progress_text or 'У черзі на обробку…' }} ({{ (app.progress * 100)|round(0, 'floor') }}%)</div>
+</div>
+{% endif %}

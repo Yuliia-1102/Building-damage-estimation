@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}Заявка №{{ app.id }}{% endblock %}
+{% block content %}
+{% set b = (result.report.building if result else None) %}
+{% set ratios = (result.report.ratios if result else None) %}
+{% set areas = (result.report.areas if result else None) %}
+{% set decision = (result.report.decision if result else None) %}
+{% set cost = (result.report.cost if result else None) %}
+{% set base = "/results/" ~ app.id %}
+
+<p class="small"><a href="/board">← Дошка</a></p>
+<h1>№{{ app.id }} · {{ app.title }}</h1>
+
+<div class="badges" style="margin-bottom:.8rem">
+  <span class="badge cond">{{ app.status_ua }}</span>
+  {% if app.simulated %}<span class="badge sim">симуляція</span>{% endif %}
+  {% if app.is_duplicate %}<span class="badge dup">можливий дублікат №{{ app.duplicate_of_id }}</span>{% endif %}
+  {% if app.revision and app.revision > 1 %}<span class="badge cond">редакція {{ app.revision }}</span>{% endif %}
+</div>
+
+{% if request.query_params.get('recomputed') %}<div class="notice ok">Перераховано за новими параметрами.</div>{% endif %}
+{% if request.query_params.get('err') %}<div class="notice err">{{ request.query_params.get('err')|replace('+',' ') }}</div>{% endif %}
+
+{% if show_dup_warning %}
+<div class="notice warn">
+  <strong>Такий самий файл уже є в заявці
+  <a href="/applications/{{ duplicate_of.id }}">№{{ duplicate_of.id }} — {{ duplicate_of.title }}</a>.</strong>
+  Перевірка за вмістом файлу ловить ту саму копію (перейменовану чи надіслану вдруге).
+  <form method="post" action="/applications/{{ app.id }}/dedupe" style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">
+    <button class="btn btn-danger" name="action" value="reject">Відхилити цю заявку</button>
+    <button class="btn" name="action" value="merge">Об'єднати із №{{ duplicate_of.id }}</button>
+    <button class="btn btn-primary" name="action" value="continue">Усе одно продовжити</button>
+  </form>
+</div>
+{% endif %}
+
+{% if app.comment %}<p class="muted">{{ app.comment }}</p>{% endif %}
+
+{# ---------- processing / queue ---------- #}
+{% if app.status in (Status.CREATED, Status.PROCESSING) %}
+  {% if app.is_duplicate and not show_dup_warning %}
+    <div class="notice warn">Заявку позначено як можливий дублікат №{{ app.duplicate_of_id }} і не поставлено в чергу.
+      Скористайтесь вибором вище або відкрийте
+      <a href="/applications/{{ app.id }}?dup=1">рішення щодо дубліката</a>.</div>
+  {% else %}
+    {% include "partials/progress.html" %}
+  {% endif %}
+{% endif %}
+
+{# ---------- failed ---------- #}
+{% if app.status == Status.FAILED %}
+<div class="panel">
+  <div class="notice err"><strong>Обробка завершилася збоєм.</strong><br>{{ app.error or 'Невідома помилка.' }}</div>
+  <form method="post" action="/applications/{{ app.id }}/retry">
+    <button class="btn btn-primary">Повторити обробку</button>
+  </form>
+</div>
+{% endif %}
+
+{# ---------- result ---------- #}
+{% if result and app.status in (Status.PROCESSED, Status.APPROVED, Status.DECLINED) %}
+
+<div class="panel">
+  <h2>Зведення</h2>
+  {% if result.summary.text_ua %}
+    <p style="font-size:1.05rem">{{ result.summary.text_ua }}</p>
+  {% else %}
+    <div class="notice warn">Недостатньо даних для категорії та вартості. Потрібні фото з інших сторін.</div>
+  {% endif %}
+  {% if result.summary.escalation_ua %}<p class="muted small">{{ result.summary.escalation_ua }}</p>{% endif %}
+  {% if result.summary.errors %}
+    <div class="notice warn">Під час обробки не виконано: {{ result.summary.errors|join('; ') }}</div>
+  {% endif %}
+  <p><a class="btn" href="{{ base }}/{{ result.pdf }}" target="_blank">⬇ Завантажити PDF-звіт</a></p>
+</div>
+
+{# views with mask toggle #}
+<div class="panel">
+  <h2>Види ({{ result.views|length }})</h2>
+  <label class="check" style="display:flex;gap:.4rem;align-items:center;font-weight:600">
+    <input type="checkbox" id="maskToggle" checked onchange="toggleMasks(this.checked)" style="width:auto">
+    показувати маски пошкоджень
+  </label>
+  <div class="views-grid" style="margin-top:.8rem">
+    {% for v in result.views %}
+    <div class="view">
+      <img class="v-overlay" src="{{ base }}/{{ v.overlay }}" alt="вид {{ v.view_id }}">
+      <img class="v-plain" src="{{ base }}/{{ v.image }}" alt="вид {{ v.view_id }}" style="display:none">
+      <div class="small muted">Вид {{ v.view_id }}{% if v.worst %} · найгірший{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# building params + reevaluate #}
+{% if b %}
+<div class="panel">
+  <h2>Параметри будівлі</h2>
+  <p class="muted small">Виправте параметри — вартість перерахується без повторної сегментації.
+    Автоматично визначено: {{ (b.auto_detected or [])|join(', ') or '—' }}.</p>
+  <form method="post" action="/applications/{{ app.id }}/reevaluate">
+    <div class="row">
+      <div><label>Поверхи</label><input type="number" name="floors" value="{{ b.floors if b.floors is not none else '' }}" min="1" step="1"></div>
+      <div><label>Висота поверху, м</label><input type="text" name="floor_height_m" value="{{ b.floor_height_m if b.floor_height_m is not none else '' }}"></div>
+      <div><label>Ширина, м</label><input type="text" name="width_m" value="{{ b.width_m|num if b.width_m is not none else '' }}"></div>
+      <div><label>Глибина, м</label><input type="text" name="depth_m" value="{{ b.depth_m|num if b.depth_m is not none else '' }}"></div>
+    </div>
+    <div class="row">
+      <div><label>Тип даху</label>
+        <select name="roof_type">
+          <option value="flat" {% if b.roof_type=='flat' %}selected{% endif %}>плоский</option>
+          <option value="pitched" {% if b.roof_type=='pitched' %}selected{% endif %}>скатний</option>
+        </select>
+      </div>
+      <div><label>Конструкція</label>
+        <select name="structure_type">
+          {% for k, name in STRUCTURE_NAMES_UA.items() %}
+          <option value="{{ k }}" {% if b.structure_type==k %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <button class="btn btn-primary" {% if app.status != Status.PROCESSED %}disabled title="Перерахунок лише в статусі «Оброблено»"{% endif %}>Перерахувати</button>
+      </div>
+    </div>
+  </form>
+  <p class="muted small" style="margin-top:.6rem">
+    Клас наслідків: {{ b.consequence_class or '—' }}.
+    {% if b.assumptions %}Припущення: {{ b.assumptions|join('; ') }}.{% endif %}
+  </p>
+</div>
+{% endif %}
+
+{# measured damage #}
+{% if ratios %}
+<div class="panel">
+  <h2>Виміряні пошкодження</h2>
+  <table>
+    <tr><td>Пошкоджений фасад</td><td>{{ ratios.damaged_facade|pct }}</td>
+        {% if areas %}<td class="muted">{{ areas.damaged_facade_m2|m2 }}</td>{% endif %}</tr>
+    <tr><td>Вибиті вікна</td><td>{{ ratios.broken_window|pct(1) }}</td>
+        {% if areas %}<td class="muted">{{ areas.broken_window_m2|m2 }}</td>{% endif %}</tr>
+    <tr><td>Пошкоджений дах</td><td>{{ ratios.damaged_roof|pct }}</td>
+        {% if areas %}<td class="muted">{{ areas.damaged_roof_m2|m2 }}</td>{% endif %}</tr>
+    <tr><td>Найгірший фасад / секція</td>
+        <td>{{ ratios.worst_facade_damage|pct }} / {{ ratios.worst_section_damage|pct }}</td><td></td></tr>
+  </table>
+</div>
+{% endif %}
+
+{# decision works #}
+{% if decision and decision.works %}
+<div class="panel">
+  <h2>Роботи</h2>
+  <table>
+    <thead><tr><th>Робота</th><th>Обсяг</th><th>Одиниця</th></tr></thead>
+    <tbody>
+    {% for w in decision.works %}
+      <tr><td>{{ WORK_NAMES_UA.get(w.work_type, w.work_type) }}</td>
+          <td>{{ w.quantity|round(1) }}</td>
+          <td>{{ UNITS_UA.get(w.unit, w.unit) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# cost #}
+{% if cost and cost.lines %}
+<div class="panel">
+  <h2>Вартість</h2>
+  <p style="font-size:1.05rem">
+    Разом: <strong>{{ cost.low|money }}–{{ cost.high|money }} грн</strong>
+    (центральна {{ cost.total|money }} грн, ціни на {{ cost.as_of }})</p>
+  <table>
+    <thead><tr><th>Робота</th><th>Позиція</th><th>Обсяг</th><th>Ціна/од.</th><th>Вартість</th></tr></thead>
+    <tbody>
+    {% for l in cost.lines %}
+      <tr>
+        <td>{{ WORK_NAMES_UA.get(l.work_type, l.work_type) }}</td>
+        <td>{{ 'робота (праця)' if l.item_name == 'labour' else l.item_name }}</td>
+        <td>{{ l.quantity|round(1) }} {{ UNITS_UA.get(l.unit, l.unit) }}</td>
+        <td>{{ l.unit_price|money }}</td>
+        <td>{{ l.cost|money }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<p class="muted small">{{ DISCLAIMER_UA }}</p>
+
+{# decision actions #}
+{% if app.status == Status.PROCESSED %}
+<div class="panel">
+  <h2>Рішення</h2>
+  {% if app.has_assessment %}
+    <form method="post" action="/applications/{{ app.id }}/approve" style="display:inline">
+      <button class="btn btn-primary">Затвердити</button>
+    </form>
+  {% else %}
+    <div class="notice warn">Заявку без оцінки затвердити не можна — лише відхилити з причиною «потрібні додаткові фото».</div>
+  {% endif %}
+  <form method="post" action="/applications/{{ app.id }}/decline" style="margin-top:.6rem">
+    <label>Причина відхилення *</label>
+    <input type="text" name="reason" required placeholder="напр. потрібні фото з інших сторін">
+    <button class="btn btn-danger" style="margin-top:.5rem">Відхилити</button>
+  </form>
+</div>
+{% elif app.status in (Status.APPROVED, Status.DECLINED) %}
+<div class="panel">
+  <div class="notice {{ 'ok' if app.status == Status.APPROVED else 'err' }}">
+    {{ app.status_ua }}{% if app.decision_comment %}: {{ app.decision_comment }}{% endif %}
+    ({{ app.decided_at|dt }})
+  </div>
+  <form method="post" action="/applications/{{ app.id }}/reopen">
+    <button class="btn btn-ghost">Повернути на розгляд</button>
+  </form>
+</div>
+{% endif %}
+
+{% endif %}
+
+{# ---------- project + files + history (always) ---------- #}
+<div class="panel">
+  <h2>Проєкт</h2>
+  <form method="post" action="/applications/{{ app.id }}/assign" style="display:flex;gap:.5rem;align-items:flex-end">
+    <div style="flex:1;max-width:320px">
+      <select name="project_id">
+        <option value="">— без проєкту —</option>
+        {% for p in projects %}
+        <option value="{{ p.id }}" {% if app.project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn">Зберегти</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Файли ({{ app.files|length }})</h2>
+  <table>
+    <thead><tr><th>Назва</th><th>Розмір</th><th>SHA-256</th></tr></thead>
+    <tbody>
+    {% for f in app.files %}
+      <tr><td>{{ f.name }}</td><td>{{ (f.bytes/1048576)|round(2) }} МБ</td>
+          <td class="muted small">{{ f.sha256[:16] }}…</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Історія статусів</h2>
+  <table>
+    <tbody>
+    {% for h in app.history %}
+      <tr><td class="muted small">{{ h.at|dt }}</td>
+          <td>{{ UA_STATUS.get(h.from_status, h.from_status or '—') }} → <strong>{{ UA_STATUS.get(h.to_status, h.to_status) }}</strong></td>
+          <td class="muted">{{ h.comment or '' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+function toggleMasks(on){
+  document.querySelectorAll('.v-overlay').forEach(e=>e.style.display = on ? '' : 'none');
+  document.querySelectorAll('.v-plain').forEach(e=>e.style.display = on ? 'none' : '');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Статистика{% endblock %}
+{% block nav_stats %}active{% endblock %}
+{% block content %}
+<h1>Статистика</h1>
+
+<form class="filters" method="get" action="/statistics">
+  <div class="f">
+    <label>Проєкт</label>
+    <select name="project_id" onchange="this.form.submit()">
+      <option value="">усі заявки</option>
+      {% for p in projects %}
+      <option value="{{ p.id }}" {% if project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="f check">
+    <input type="checkbox" id="is" name="include_simulated" value="1" {% if include_simulated %}checked{% endif %} onchange="this.form.submit()">
+    <label for="is" style="margin:0">враховувати симульовані</label>
+  </div>
+</form>
+
+<div class="stat-tiles">
+  <div class="tile"><div class="n">{{ stats.total }}</div><div class="l">усього заявок</div></div>
+  <div class="tile"><div class="n">{{ stats.approved }}</div><div class="l">затверджено</div></div>
+  <div class="tile"><div class="n">{{ stats.declined }}</div><div class="l">відхилено</div></div>
+  <div class="tile"><div class="n">{{ stats.duplicates }}</div><div class="l">можливих дублікатів</div></div>
+  <div class="tile"><div class="n">{{ stats.merged }}</div><div class="l">об'єднано</div></div>
+</div>
+
+<div class="panel">
+  <h2>За статусами</h2>
+  <table>
+    {% for st in Status.ALL %}
+    <tr><td>{{ UA_STATUS[st] }}</td><td>{{ stats.by_status[st] }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="row">
+  <div class="panel">
+    <h2>Категорії пошкоджень</h2>
+    <table>
+      {% for c in ['I','II','III'] %}
+      <tr><td>{{ c }} — {{ DAMAGE_NAMES_UA[c] }}</td><td>{{ stats.by_damage[c] }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="panel">
+    <h2>Технічний стан</h2>
+    <table>
+      {% for n in [1,2,3,4] %}
+      <tr><td>{{ n }} — {{ CONDITION_NAMES_UA[n] }}</td><td>{{ stats.by_condition[n] }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Вартість і обробка</h2>
+  <table>
+    <tr><td>Сума вартості затверджених</td><td>{{ stats.approved_cost_low|money }}–{{ stats.approved_cost_high|money }} грн</td></tr>
+    <tr><td>Середній час обробки</td><td>{{ stats.avg_seconds|duration }}</td></tr>
+    <tr><td>Частка збоїв</td><td>{{ (stats.fail_rate*100)|round(0) }}%</td></tr>
+    <tr><td>Заявок без оцінки</td><td>{{ stats.no_assessment }}</td></tr>
+  </table>
+</div>
+{% if not include_simulated %}<p class="muted small">Симульовані заявки не враховано. Увімкніть перемикач, щоб їх додати.</p>{% endif %}
+{% endblock %}

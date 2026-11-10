@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block nav_projects %}active{% endblock %}
+{% block content %}
+<p class="small"><a href="/projects">← Проєкти</a></p>
+<h1>{{ project.name }}</h1>
+{% if project.description %}<p class="muted">{{ project.description }}</p>{% endif %}
+
+<div class="stat-tiles">
+  <div class="tile"><div class="n">{{ apps|length }}</div><div class="l">заявок</div></div>
+  <div class="tile"><div class="n">{{ sums.all_low|money_short }}–{{ sums.all_high|money_short }}</div><div class="l">вартість усіх оцінених, грн</div></div>
+  <div class="tile"><div class="n">{{ sums.appr_low|money_short }}–{{ sums.appr_high|money_short }}</div><div class="l">вартість затверджених, грн</div></div>
+  <div class="tile"><div class="n">{{ sums.no_assessment }}</div><div class="l">без оцінки</div></div>
+</div>
+
+<div class="panel">
+  <h2>Розподіл за категоріями</h2>
+  <p>I — {{ stats.by_damage['I'] }} · II — {{ stats.by_damage['II'] }} · III — {{ stats.by_damage['III'] }}
+     <span class="muted small">(симульовані не враховано)</span></p>
+</div>
+
+<div class="panel">
+  <h2>Заявки проєкту</h2>
+  {% if apps %}
+  <table>
+    <thead><tr><th>№</th><th>Назва</th><th>Статус</th><th>Категорія</th><th>Вартість, грн</th></tr></thead>
+    <tbody>
+    {% for a in apps %}
+      <tr>
+        <td><a href="/applications/{{ a.id }}">{{ a.id }}</a></td>
+        <td>{{ a.title }}{% if a.simulated %} <span class="badge sim">симуляція</span>{% endif %}</td>
+        <td>{{ a.status_ua }}</td>
+        <td>{% if a.damage_category %}{{ a.damage_category }}{% else %}—{% endif %}</td>
+        <td>{% if a.cost_low %}{{ a.cost_low|money }}–{{ a.cost_high|money }}{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">У проєкті ще немає заявок.</div>
+  {% endif %}
+</div>
+{% endblock %}
