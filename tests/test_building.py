@@ -38,7 +38,7 @@ def answer(**kw):
 
 def test_params_from_floor_count():
     p = params_from_answer(answer(), facade_mask())
-    assert p.height_m == 15 and p.width_m == pytest.approx(30) and p.depth_m == pytest.approx(30)
+    assert p.height_m == 15 and p.width_m == pytest.approx(30) and p.depth_m == pytest.approx(12)  # typical depth
     assert p.height_source == "floors" and "floors" in p.auto_detected
     assert any("depth assumed" in a for a in p.assumptions)
 

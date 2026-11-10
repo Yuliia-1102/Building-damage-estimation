@@ -22,7 +22,8 @@ def estimate_cost(works: list[WorkItem], prices: PriceSource, views: int,
 
     for work in works:
         if work.quantity is None:
-            skipped.append(f"{work.work_type}: damaged area unknown")
+            from core.reference import WORK_NAMES_UA
+            skipped.append(f"{WORK_NAMES_UA.get(work.work_type, work.work_type)}: площа пошкоджень невідома")
             continue
         work_lines = []
         for item in prices.get_items_by_work_type(work.work_type, limit):

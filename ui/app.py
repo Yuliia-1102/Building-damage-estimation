@@ -30,7 +30,8 @@ from core.case import case_from_paths, case_from_video  # noqa: E402
 from core.imageio import LEGEND, overlay  # noqa: E402
 from core.pipeline import evaluate, segment_case  # noqa: E402
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA,  # noqa: E402
-                            DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, UNITS_UA, WORK_NAMES_UA)
+                            DISCLAIMER_UA, ESCALATION_UA, NOT_RESTORABLE_UA, STRUCTURE_NAMES_UA, UNITS_UA,
+                            WORK_NAMES_UA)
 from core.provenance import consequence_note, parameter_rows  # noqa: E402
 from core.report_pdf import (STUB_UA, COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf,  # noqa: E402
                              cost_basis_ua, facade_notes, summary_ua, walls_seen_ua)
@@ -400,6 +401,9 @@ def cost_section(report):
     d, k = report.decision, report.cost
     if d is None or d.is_stub:
         st.info("Перелік робіт і вартість не визначено: вони залежать від рішення моделі.")
+        return
+    if d.damage_category == "III":
+        st.warning(NOT_RESTORABLE_UA, icon="🏚️")
         return
     c1, c2 = st.columns([2, 3])
     with c1.container(border=True):

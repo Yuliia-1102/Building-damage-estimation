@@ -36,7 +36,10 @@ def damaged_areas(ratios: CombinedRatios, building: BuildingParams, frames=None)
 
     walls = wall_area(width, depth, height)
     visible = visible_wall_area(frames, height, walls) if frames else walls
-    roof = roof_area(width, depth, building.roof_shape_coef) if ratios.damaged_roof is not None else None
+    # A roof seen only as a strip from the side (drone at roof level, a high-rise) gives a share of damage on a
+    # few pixels: it is kept as a ratio, but no area is priced from it.
+    roof = (roof_area(width, depth, building.roof_shape_coef)
+            if ratios.damaged_roof is not None and not ratios.roof_partly_seen else None)
 
     def times(ratio: float | None, area: float | None) -> float | None:
         return None if ratio is None or area is None else ratio * area

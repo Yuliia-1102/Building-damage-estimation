@@ -36,6 +36,10 @@ roof_shape_coef_flat = 1.0
 main_building_grid = 200      # px of the coarse grid used to find the main building (connected regions)
 main_building_gap = 0.03      # parts of one building closer than this share of the frame are joined
 depth_min_views = 3
+# Depth when the end wall is not seen (one side only): a typical depth of a residential block (5-9 storey
+# sectional houses are 12-15 m deep), never more than the width. Team assumption, shown in the report. Before
+# 2026-11-10 the depth was taken equal to the width, which turned a 99 m long block into a 99 x 99 m roof.
+typical_depth_m = 12.0
 # Outer wall thickness by structure type, for masonry and debris volumes (m). Brick: 1.5 bricks, typical of
 # 5-9 storey housing (older buildings have 2 bricks, 0.51); panel: three-layer concrete panel; frames: infill.
 wall_thickness_m = {brick = 0.38, large_panel = 0.3, monolithic_frame = 0.25, precast_frame = 0.25, steel_frame = 0.25, wooden = 0.2, unknown = 0.38}

@@ -137,25 +137,30 @@ def params_from_answer(answer: BuildingResponse, mask: np.ndarray, crop_height: 
 
     if p.height_m is not None:
         p.width_m, _ = geom.width_from_height(mask, p.height_m)
-        p.depth_m = p.width_m
+        p.depth_m = assumed_depth(p.width_m)
         p.assumptions.append(DEPTH_ASSUMED)
     p.occupants_estimate, p.consequence_class = geom.consequence_class(p.floors, p.width_m, p.depth_m)
     return p
 
 
-DEPTH_ASSUMED = "depth assumed equal to width (no corner view used)"
+DEPTH_ASSUMED = "depth assumed typical (end wall not seen)"
+
+
+def assumed_depth(width_m: float) -> float:
+    """[geometry] typical_depth_m, or the width when the building is narrower than that."""
+    return min(width_m, config.get("geometry", "typical_depth_m"))
 DEPTH_MEASURED = "depth measured on the narrowest of the views (the end wall)"
 
 
 def set_depth(p: BuildingParams, masks: list[np.ndarray]) -> None:
-    """Depth from views of several sides when there are enough of them, otherwise equal to the width."""
+    """Depth from views of several sides when there are enough of them, otherwise a typical depth."""
     if p.width_m is None or p.height_m is None:
         return
     for note in (DEPTH_ASSUMED, DEPTH_MEASURED):
         if note in p.assumptions:
             p.assumptions.remove(note)
     depth = geom.depth_from_views(masks, p.height_m, p.width_m)
-    p.depth_m = depth if depth is not None else p.width_m
+    p.depth_m = depth if depth is not None else assumed_depth(p.width_m)
     p.assumptions.append(DEPTH_MEASURED if depth is not None else DEPTH_ASSUMED)
     p.occupants_estimate, p.consequence_class = geom.consequence_class(p.floors, p.width_m, p.depth_m)
 

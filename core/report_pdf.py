@@ -13,7 +13,8 @@ from PIL import Image
 from core import config
 from core.imageio import LEGEND, overlay
 from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMENDATION_UA, DISCLAIMER_UA,
-                            ESCALATION_UA, STRUCTURE_NAMES_UA, UNITS_UA, WORK_NAMES_UA)
+                            ESCALATION_UA, NOT_RESTORABLE_UA, STRUCTURE_NAMES_UA, UNITS_UA,
+                            WORK_NAMES_UA)
 from core.provenance import consequence_note, parameter_rows
 from core.types import Report
 
@@ -27,6 +28,9 @@ LEGEND_UA = {"background": "фон", "facade": "фасад", "roof": "дах", "
 ASSUMPTIONS_UA = {
     "depth assumed equal to width (no corner view used)":
         "глибину прийнято рівною ширині: торця будівлі не видно на знімках; виправте, якщо відома",
+    "depth assumed typical (end wall not seen)":
+        "глибину прийнято типовою для житлового будинку (12 м, або ширина, якщо будівля вужча): торця не видно "
+        "на знімках; виправте, якщо відома",
     "depth measured on the narrowest of the views (the end wall)":
         "глибину виміряно за найвужчим видом (торець будівлі)",
     "roof type unknown, flat roof assumed": "тип даху невідомий, прийнято плаский",
@@ -54,7 +58,9 @@ def summary_ua(report: Report) -> str | None:
         return f"Категорію не визначено: недостатньо даних (впевненість {d.confidence:.2f})."
     parts = [f"Категорія пошкоджень {d.damage_category} ({DAMAGE_NAMES_UA[d.damage_category]})",
              f"технічний стан {d.condition_category} ({CONDITION_NAMES_UA[d.condition_category]})"]
-    if k and k.total > 0:
+    if d.damage_category == "III":
+        parts.append("відновлення недоцільне, рекомендовано демонтаж")
+    elif k and k.total > 0:
         parts.append(f"вартість від {_uah(k.low)} до {_uah(k.high)}")
     parts.append(f"впевненість {d.confidence:.2f}")
     return " · ".join(parts)
@@ -349,6 +355,8 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     if d is None or d.is_stub:
         _p(pdf, "Перелік робіт і вартість не визначено: вони залежать від рішення моделі.")
         k = None
+    elif d.damage_category == "III":
+        _p(pdf, NOT_RESTORABLE_UA)
     if d and not d.is_stub and d.works:
         rows = [["Робота", "Обсяг", "Вартість"]]
         for w in d.works:

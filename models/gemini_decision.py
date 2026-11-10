@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from core.decision import escalation_level, match_roof_type, works_with_quantities
+from core.decision import apply_category_rules, escalation_level, match_roof_type, works_with_quantities
 from core.reference import (CONDITION_CATEGORIES, DAMAGE_CATEGORIES, MODEL_WORKS, WORK_TYPES, WORK_TYPES_BY_CODE,
                             roof_covering_category)
 from core import cache, config
@@ -154,6 +154,8 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
         "masonry) that has to be rebuilt; the rest is surface damage (chipped, cracked, sooted, plaster or cladding "
         "lost). insulated: the facade has an insulation layer. The code then adds debris removal and masonry on the "
         "destroyed wall, plaster or the insulation system and painting on the whole wall, and scaffolding.",
+        "- Category I is damage without loss of load-bearing capacity: give destroyed_wall_share 0 for it (holes "
+        "through a wall mean category II or higher).",
         "- For a building in damage category III do not restore windows; close the openings temporarily.",
         "- confidence: low when few views were assessed, a surface is not visible, or the measurements are "
         "borderline between two categories; high only when the category is clear. Load-bearing structures "
@@ -201,7 +203,7 @@ class GeminiDecisionLayer:
         self.last_images = images
         answer = self.ask(prompt, images)
         codes = match_roof_type(answer.work_types, building and building.roof_type)
-        facade = FacadeState(**answer.facade.model_dump())
+        facade = apply_category_rules(answer.damage_category, FacadeState(**answer.facade.model_dump()))
         return Decision(
             damage_category=answer.damage_category,
             condition_category=answer.condition_category,

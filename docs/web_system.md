@@ -188,6 +188,7 @@ data/results/42/
 | `confidence` | 0–1 / null | впевненість моделі |
 | `escalation`, `escalation_ua` | `confirmed` / `preliminary` / `insufficient_data`, str | наскільки можна довіряти категорії |
 | `cost_low`, `cost_high`, `cost_total` | int / null, грн | діапазон і центральна оцінка; null, якщо оцінки немає |
+| `not_restorable` | bool | `true` для категорії III: робіт і вартості немає, показати `NOT_RESTORABLE_UA` («Відновлення недоцільне, рекомендовано демонтаж»); у суму проєкту така заявка не входить |
 | `currency`, `prices_as_of` | str | `UAH`, дата цін |
 | `floors`, `views_assessed` | int | поверхи, кількість оцінених видів |
 | `errors` | список str | кроки, що не виконалися; непорожній — показати на сторінці |

@@ -87,14 +87,15 @@ Masks are cached in `cache/masks/` by the content hash of the photo, and decisio
 Gemini (gemini-3.8-flash) looks at the frame with the most facade, cropped to the building (no mask drawn,
 so windows and floor lines stay clean; the next frames are tried if floors cannot be read), and returns the floor count, structure type, roof
 type and, if floors cannot be read, a door, car or person with its box (fallback heights 2.1 / 1.5 /
-1.7 m). Code turns the height into a scale using the facade in the mask, then width; depth is assumed
-equal to width. A rough consequence class (ДБН В.1.2-14:2018, table 1) is estimated from the size.
+1.7 m). Code turns the height into a scale using the facade in the mask, then width; depth is measured on
+the narrowest view when at least three views show the building (the end wall), otherwise a typical 12 m
+(`[geometry] typical_depth_m`, never more than the width), stated in the report as an assumption. A rough consequence class (ДБН В.1.2-14:2018, table 1) is estimated from the size.
 Every detected value is marked as automatic and can be corrected; the pipeline is split into
 `segment_case` (slow, once) and `evaluate` (fast), so a correction never re-runs the model.
 
 ## Decision layer
 
-The language model (gemini-3.1-flash-lite) receives the measurements and up to `[decision] max_images`
+The language model (gemini-3.8-flash) receives the measurements and up to `[decision] max_images`
 views (worst section, worst facade view, worst roof view first), cropped to the building with the
 segmentation drawn over them (light fill and outlines, so the photo stays visible). The numbers are the
 main evidence; the images show what the damage is. It returns fixed fields validated against a schema:
@@ -104,6 +105,11 @@ view, the share of damage in the lower / middle / upper third of the facade and 
 category computed in code from ДСТУ 9273 table В.7.1. A malformed answer is retried. Quantities are
 the damaged areas, computed by code. Confidence sets how far the categories can be trusted for
 ordering inspections: confirmed, preliminary, insufficient data.
+
+Rules enforced by code whatever the model answers: category I has no wall destroyed through, so no masonry
+and no debris removal; category III gets no works and no cost ("restoration is not reasonable, demolition
+recommended", Methodology No. 144); a roof seen only as a strip keeps its damage share, but no roof area or
+roof cost is computed from it.
 
 ## Cost
 
@@ -137,6 +143,31 @@ uv run python -m tools.run_testset testset/cases.csv --out output/testset.csv
 uv run python -m tools.run_testset testset/cases.csv --repeat 3 --no-decision-cache --out output/consistency.csv
 uv run python -m tools.consistency output/consistency.csv
 ```
+
+## Operator web system (stage 3)
+
+`core/service.py` is the processing entry point for the web system (files in, a result folder with
+`result.json`, views and PDF out), `core/simulator.py` answers the same calls from a pack of recorded cases
+(`tools/make_pack.py`). The task and the result format: `docs/web_system.md`.
+
+## Limitations and known issues
+
+- A preliminary visual assessment for ordering inspections, not a technical inspection: load-bearing
+  structures inside the building cannot be seen in photos (Methodology No. 144 does not allow an inspection
+  from photos alone).
+- Test data: the videos are generated from one real photo each (the other sides are invented by the video
+  model), and every test photo is in the segmentation model's training data. No real drone footage yet.
+- Only the walls seen are measured; the other sides are reported as not assessed. With one side seen, the
+  depth is a typical 12 m, not measured.
+- The roof area comes from the building's dimensions, not from the roof in the mask; a roof seen only as a
+  strip is not priced.
+- Broken windows are overcounted on buildings with glazed balconies: the segmentation sometimes marks balcony
+  glazing as broken windows.
+- Wall works depend on the language model's judgement of how much of the damaged facade is window openings
+  and how much of the wall is destroyed through.
+- Costs are rough: 14 work types, 35 materials, prices from public sources, a range that widens with fewer
+  views.
+- Duplicate control in the web system catches identical files only, not another photo of the same building.
 
 ## Structure
 

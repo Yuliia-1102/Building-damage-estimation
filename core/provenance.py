@@ -32,6 +32,8 @@ def depth_source(b: BuildingParams) -> str:
         return ENTERED
     if any(a.startswith("depth measured") for a in b.assumptions):
         return "виміряно за найвужчим видом (торець будівлі)"
+    if any(a.startswith("depth assumed typical") for a in b.assumptions):
+        return "прийнято типовою, 12 м (торця не видно)"
     return "прийнято рівною ширині (торця не видно)"
 
 

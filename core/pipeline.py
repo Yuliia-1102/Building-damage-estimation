@@ -112,7 +112,9 @@ def evaluate(seg: Segmentation,
                 log.exception("decision layer failed")
             report.errors.append(f"decision layer: {e}")
 
-    if price_source is not None and report.decision is not None:
+    if report.decision is not None and not report.decision.is_stub and report.decision.damage_category == "III":
+        report.decision.works = []      # restoration is not reasonable: no works, no cost (reference.NOT_RESTORABLE_UA)
+    elif price_source is not None and report.decision is not None:
         from core.cost import estimate_cost
         report.cost = estimate_cost(report.decision.works, price_source, report.views_assessed)
         log.info("cost: %s", report.cost)

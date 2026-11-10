@@ -89,10 +89,11 @@ class RecordedDecision:
         self.recorded = decision
 
     def decide(self, ratios, areas, building, views=None):
-        from core.decision import match_roof_type, works_with_quantities
+        from core.decision import apply_category_rules, match_roof_type, works_with_quantities
         d = self.recorded
         if d is None:
             return None
+        d.facade = apply_category_rules(d.damage_category, d.facade)
         codes = match_roof_type([w.work_type for w in d.works], building and building.roof_type)
         d.works = works_with_quantities(codes, areas, d.facade, building, facade_damaged=bool(ratios.damaged_facade))
         return d
@@ -238,6 +239,7 @@ def _summary(report: Report) -> dict:
         "cost_total": round(k.total) if shown and k and k.total > 0 else None,
         "currency": k.currency if k else "UAH",
         "prices_as_of": k.as_of if k else None,
+        "not_restorable": shown and d.damage_category == "III",   # true: no works and no cost, NOT_RESTORABLE_UA
         "floors": b.floors if b else None,
         "views_assessed": report.views_assessed,
         "errors": report.errors,

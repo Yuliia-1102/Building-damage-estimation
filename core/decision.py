@@ -21,6 +21,15 @@ def wall_thickness(building: BuildingParams | None) -> float:
     return table.get(kind, table["unknown"])
 
 
+def apply_category_rules(category: str, facade: FacadeState | None) -> FacadeState | None:
+    """Category I is minor damage without loss of load-bearing capacity (Methodology No. 144, Додаток 3): a wall
+    destroyed through cannot be part of it, so no masonry and no debris removal, whatever the model said."""
+    if facade is not None and category == "I" and facade.destroyed_wall_share > 0:
+        facade = FacadeState(window_openings_share=facade.window_openings_share, destroyed_wall_share=0.0,
+                             insulated=facade.insulated)
+    return facade
+
+
 def wall_works(facade: FacadeState, damaged_facade_m2: float | None, building: BuildingParams | None) -> list[WorkItem]:
     """The works on the walls, in the order they are done, from the model's assessment of the damaged facade:
       window openings (share w of the damaged area) go to the window works, the rest is wall;
