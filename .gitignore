@@ -30,3 +30,6 @@ output/
 .DS_Store
 .idea/
 .vscode/
+
+# Development pack of recorded cases (tools/make_pack.py), shared as devpack.zip
+devpack/
