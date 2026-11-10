@@ -1,6 +1,6 @@
-"""Rules the code enforces whatever the model answers: no masonry for category I, no restoration for III,
+"""Rules the code enforces whatever the model answers: masonry only for a local breach in category I, no restoration for III,
 no roof area priced from a roof seen only as a strip, a typical depth when the end wall is not seen."""
-from core.decision import apply_category_rules, works_with_quantities
+from core.decision import apply_category_rules
 from core.geometry import damaged_areas
 from core.pipeline import evaluate, segment_case
 from core.types import BuildingParams, CombinedRatios, Case, FacadeState, View
@@ -8,11 +8,10 @@ from models.gemini_building import assumed_depth
 from models.stub import StubBuildingParams, StubDecisionLayer, StubSegmenter
 
 
-def test_category_one_has_no_masonry_or_debris():
+def test_category_one_masonry_only_for_a_local_breach():
     facade = apply_category_rules("I", FacadeState(window_openings_share=0.2, destroyed_wall_share=0.4))
-    assert facade.destroyed_wall_share == 0 and facade.window_openings_share == 0.2
-    codes = [w.work_type for w in works_with_quantities([], None, facade, None, facade_damaged=True)]
-    assert "facade_masonry_repair" not in codes and "facade_debris_removal" not in codes
+    assert facade.destroyed_wall_share == 0.1 and facade.window_openings_share == 0.2
+    assert apply_category_rules("I", FacadeState(destroyed_wall_share=0.05)).destroyed_wall_share == 0.05
     assert apply_category_rules("II", FacadeState(destroyed_wall_share=0.4)).destroyed_wall_share == 0.4
 
 

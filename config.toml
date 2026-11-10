@@ -87,7 +87,12 @@ building_model = "gemini-3.8-flash"
 # worst roof view first). About 1,100 input tokens each; 0 = numbers only.
 max_images = 3
 retry_on_overload = 4          # attempts on 429 / 503, with exponential backoff
-seed = 42   # fixed with temperature 0, for repeatable answers (task 9.4)
+seed = 42
+# Category I keeps load-bearing capacity (Methodology No. 144, Додаток 3): a wall may be holed only locally (a breach
+# in one wall). The model's share of wall destroyed through is capped at this for category I, so masonry stays for a
+# local hole but not for a large area (download10, 2026-10-20: masonry over a facade whose cladding was lost).
+# Team assumption.
+category_one_max_destroyed = 0.1   # fixed with temperature 0, for repeatable answers (task 9.4)
 
 [ui]
 max_upload_mb = 300     # task 7.1.3

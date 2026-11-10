@@ -22,10 +22,12 @@ def wall_thickness(building: BuildingParams | None) -> float:
 
 
 def apply_category_rules(category: str, facade: FacadeState | None) -> FacadeState | None:
-    """Category I is minor damage without loss of load-bearing capacity (Methodology No. 144, Додаток 3): a wall
-    destroyed through cannot be part of it, so no masonry and no debris removal, whatever the model said."""
-    if facade is not None and category == "I" and facade.destroyed_wall_share > 0:
-        facade = FacadeState(window_openings_share=facade.window_openings_share, destroyed_wall_share=0.0,
+    """Category I is minor damage without loss of load-bearing capacity (Methodology No. 144, Додаток 3): a wall may
+    be holed only locally, so the share destroyed through is capped at [decision] category_one_max_destroyed:
+    masonry for a local breach, not over a large area, whatever the model said."""
+    cap = config.get("decision", "category_one_max_destroyed")
+    if facade is not None and category == "I" and facade.destroyed_wall_share > cap:
+        facade = FacadeState(window_openings_share=facade.window_openings_share, destroyed_wall_share=cap,
                              insulated=facade.insulated)
     return facade
 

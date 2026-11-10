@@ -154,8 +154,8 @@ def build_prompt(ratios: CombinedRatios, areas: DamagedAreas | None, building: B
         "masonry) that has to be rebuilt; the rest is surface damage (chipped, cracked, sooted, plaster or cladding "
         "lost). insulated: the facade has an insulation layer. The code then adds debris removal and masonry on the "
         "destroyed wall, plaster or the insulation system and painting on the whole wall, and scaffolding.",
-        "- Category I is damage without loss of load-bearing capacity: give destroyed_wall_share 0 for it (holes "
-        "through a wall mean category II or higher).",
+        "- Category I keeps load-bearing capacity: a wall can be holed only locally (one breach), so for category I "
+        "destroyed_wall_share is small (at most 0.1); a large destroyed part of the walls is category II or higher.",
         "- For a building in damage category III do not restore windows; close the openings temporarily.",
         "- confidence: low when few views were assessed, a surface is not visible, or the measurements are "
         "borderline between two categories; high only when the category is clear. Load-bearing structures "

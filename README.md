@@ -106,8 +106,9 @@ category computed in code from ДСТУ 9273 table В.7.1. A malformed answer is
 the damaged areas, computed by code. Confidence sets how far the categories can be trusted for
 ordering inspections: confirmed, preliminary, insufficient data.
 
-Rules enforced by code whatever the model answers: category I has no wall destroyed through, so no masonry
-and no debris removal; category III gets no works and no cost ("restoration is not reasonable, demolition
+Rules enforced by code whatever the model answers: in category I a wall is holed only locally, so the share of
+wall destroyed through (masonry, debris removal) is capped at 10% (`[decision] category_one_max_destroyed`);
+category III gets no works and no cost ("restoration is not reasonable, demolition
 recommended", Methodology No. 144); a roof seen only as a strip keeps its damage share, but no roof area or
 roof cost is computed from it.
 
