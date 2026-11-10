@@ -46,7 +46,9 @@ Development answers ("sources" in result.json says where each part came from) ar
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--cases", type=Path, default=config.ROOT / "testset" / "cases.csv")
+    p.add_argument("--cases", type=Path, nargs="+",
+                   default=[config.ROOT / "testset" / "cases.csv", config.ROOT / "tools" / "devpack_extra.csv"],
+                   help="the test set, then extra photos used only for the development pack")
     p.add_argument("--out", type=Path, default=config.ROOT / "devpack")
     p.add_argument("--llm", choices=["offline", "claude", "gemini"], default="offline",
                    help="offline: cached answers only (free); gemini: paid requests for answers not cached")
@@ -60,7 +62,8 @@ def main() -> None:
     (out / "inputs").mkdir(parents=True, exist_ok=True)
     index_path = out / "index.json"
     previous = {c["case_id"]: c for c in json.loads(index_path.read_text())["cases"]} if index_path.exists() else {}
-    rows = list(csv.DictReader(open(args.cases, encoding="utf-8")))
+    rows = [r for path in args.cases for r in csv.DictReader(open(path, encoding="utf-8"))]
+    order = [r["case_id"] for r in rows]
     if args.only:
         rows = [r for r in rows if r["case_id"] in args.only]
     for row in rows:
@@ -107,8 +110,7 @@ def main() -> None:
         for name, q in (("fail_test.jpg", 90), ("lowconf_test.jpg", 85), ("new_building.jpg", 80)):
             if not (special / name).exists():
                 img.save(special / name, quality=q)      # new bytes: not a duplicate of the pack files
-    cases = [previous[r["case_id"]] for r in csv.DictReader(open(args.cases, encoding="utf-8"))
-             if r["case_id"] in previous]
+    cases = [previous[c] for c in order if c in previous]
     index_path.write_text(json.dumps({"built": datetime.now().isoformat(timespec="seconds"), "llm": args.llm,
                                       "cases": cases}, indent=2, ensure_ascii=False), encoding="utf-8")
     (out / "README.md").write_text(README.format(built=datetime.now().date(), llm=args.llm), encoding="utf-8")

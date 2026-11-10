@@ -238,6 +238,36 @@ devpack/
 | `photo_burned` | 1 фото | 4 поверхи, вигорілий фасад | II / 3, 0,73–1,91 млн |
 | `photo_set_download12_2` | 5 фото | та сама будівля, що `download12_2` | II / 4, 1,86–2,85 млн |
 
+Ще 23 окремі фото інших будівель (`extra_*`, по одному фото на заявку) додано, щоб на дошці було
+достатньо заявок різної тяжкості: 9 категорії I, 20 категорії II, 4 категорії III на весь набір. Категорії для них
+визначено візуально, лише для розробки. Список і описи — `tools/devpack_extra.csv`.
+
+| case_id | Будівля | Записано |
+|---|---|---|
+| `extra_download14_3` | 12-storey panel block, middle section damaged on the lower floors | II / 3, 1,88 млн–4,96 млн |
+| `extra_download15_1` | school seen from a drone, roof partly damaged | I / 2, 494 тис.–1,30 млн |
+| `extra_download15_3` | 3-storey building, pitched roof destroyed | II / 3, 3,43 млн–9,03 млн |
+| `extra_download16_2` | 16-storey tower burnt out over the whole facade | III / 4, 2,65 млн–6,97 млн |
+| `extra_download17_3` | 9-storey panel block, end section burnt | II / 3, 257 тис.–677 тис. |
+| `extra_download18_3` | 9-storey panel blocks, a few shell holes | I / 2, 113 тис.–299 тис. |
+| `extra_download19_1` | 3-storey building, roof and top floor burnt out | II / 3, 11,14 млн–29,36 млн |
+| `extra_download20` | 10-storey residential, balconies and windows damaged | I / 2, 1,66 млн–4,36 млн |
+| `extra_download21` | 3-storey building, roof destroyed, entrance part collapsed | II / 4, 1,22 млн–3,21 млн |
+| `extra_download24` | school, windows broken | I / 2, 81 тис.–214 тис. |
+| `extra_download25_2` | 9-storey panel block, windows broken | I / 2, 257 тис.–678 тис. |
+| `extra_download27_2` | 16-storey panel tower, one riser burnt | II / 3, 548 тис.–1,44 млн |
+| `extra_download28_1` | 3-storey building, end wall collapsed | II / 4, 101 тис.–267 тис. |
+| `extra_download3` | 5-storey residential with a pitched roof, one corner hit | I / 2, 154 тис.–406 тис. |
+| `extra_download30_1` | 9-storey panel block, part of the facade burnt | I / 2, 275 тис.–726 тис. |
+| `extra_download44` | 5-storey building, windows broken, a crack through the wall | II / 3, 179 тис.–473 тис. |
+| `extra_download47` | 4-storey office, one section collapsed through its height | II / 4, 170 тис.–447 тис. |
+| `extra_download4_1` | 2-storey building, pitched roof destroyed | II / 3, 482 тис.–1,27 млн |
+| `extra_download7_6` | 2-storey brick house, roof and upper wall breached | II / 3, 89 тис.–234 тис. |
+| `extra_download80` | 5-storey brick block, top section collapsed | II / 4, 87 тис.–230 тис. |
+| `extra_download82` | 16-storey panel tower, one section destroyed through its full height | III / 4, 2,48 млн–6,53 млн |
+| `extra_p114513` | old brick building, ruined | III / 4, 129 тис.–341 тис. |
+| `extra_p114623` | 5-storey brick block, upper part collapsed | II / 4, 167 тис.–440 тис. |
+
 Відео згенеровані з одного реального фото кожне. Для вебчастини це не важливо, але на захисті про це треба
 сказати.
 
