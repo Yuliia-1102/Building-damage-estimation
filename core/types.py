@@ -182,6 +182,14 @@ class CostEstimate:
     skipped_works: list[str] = field(default_factory=list)   # works with unknown area or no price
     price_source: str = ""      # where the prices came from, shown in the report
 
+    @property
+    def labour(self) -> float:
+        return sum(line.cost for line in self.lines if line.item_name == "labour")
+
+    @property
+    def materials(self) -> float:
+        return self.total - self.labour
+
 
 # ---------- output ----------
 

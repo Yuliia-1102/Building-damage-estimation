@@ -33,7 +33,7 @@ from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMEN
                             DISCLAIMER_UA, ESCALATION_UA, STRUCTURE_NAMES_UA, UNITS_UA, WORK_NAMES_UA)
 from core.provenance import consequence_note, parameter_rows  # noqa: E402
 from core.report_pdf import (STUB_UA, COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf,  # noqa: E402
-                             facade_notes, walls_seen_ua)
+                             cost_basis_ua, facade_notes, summary_ua, walls_seen_ua)
 
 st.set_page_config(page_title="Оцінка пошкоджень будівлі", page_icon="🏚️", layout="wide")
 
@@ -136,7 +136,8 @@ def run_assessment(mode: str, files) -> None:
             st.write("🎞️ Нарізаємо відео і відбираємо найкращі кадри з кожного відрізка обльоту…")
             case, video_info = case_from_video(folder / Path(files[0].name).name, folder, get_quick_segmenter())
         else:
-            case = case_from_paths(folder.name, [folder / Path(f.name).name for f in files])
+            name = Path(files[0].name).stem + (f"+{len(files) - 1}" if len(files) > 1 else "")
+            case = case_from_paths(name, [folder / Path(f.name).name for f in files])
         bar = st.progress(0.0)
 
         def progress(done, total, text):
@@ -407,6 +408,7 @@ def cost_section(report):
             st.markdown(f"<div class='big-cost'>{uah(k.low)}<br>— {uah(k.high)}</div>", unsafe_allow_html=True)
             st.caption(f"Ціни станом на {k.as_of}" + (f", джерело: {k.price_source}" if k.price_source else "")
                        + f". Оцінено видів: {report.views_assessed}; що менше видів, то ширший діапазон.")
+            st.caption(" ".join(cost_basis_ua(report)))
         else:
             st.info("Вартість не розраховано: невідомі розміри будівлі або немає цін. "
                     "Вкажіть параметри в розділі 2.")
@@ -453,6 +455,10 @@ def pdf_section(report, seg):
 def report_screen():
     report, seg = st.session_state.report, st.session_state.seg
     source_notice(report)
+    st.markdown(f"#### Об'єкт: {report.case_id}")
+    summary = summary_ua(report)
+    if summary:
+        st.info(summary)
     views_section(report, seg)
     building_section(report)
     damage_section(report)

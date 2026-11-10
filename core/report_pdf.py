@@ -45,6 +45,37 @@ def walls_seen_ua(a, fmt) -> str:
     return text
 
 
+def summary_ua(report: Report) -> str | None:
+    """The result in one line, for the top of the report. None when there is no real decision (a stub is no result)."""
+    d, k = report.decision, report.cost
+    if d is None or d.is_stub:
+        return None
+    if d.escalation == "insufficient_data":
+        return f"Категорію не визначено: недостатньо даних (впевненість {d.confidence:.2f})."
+    parts = [f"Категорія пошкоджень {d.damage_category} ({DAMAGE_NAMES_UA[d.damage_category]})",
+             f"технічний стан {d.condition_category} ({CONDITION_NAMES_UA[d.condition_category]})"]
+    if k and k.total > 0:
+        parts.append(f"вартість від {_uah(k.low)} до {_uah(k.high)}")
+    parts.append(f"впевненість {d.confidence:.2f}")
+    return " · ".join(parts)
+
+
+def cost_basis_ua(report: Report) -> list[str]:
+    """What the cost is made of: materials against labour, and the damaged areas it was computed for."""
+    k, a = report.cost, report.areas
+    if k is None or k.total <= 0:
+        return []
+    split = f"Центральна оцінка {_uah(k.total)}: матеріали {_uah(k.materials)}"
+    notes = [split + (f", робота {_uah(k.labour)}." if k.labour > 0 else " (розцінок на роботу немає).")]
+    if a:
+        areas = [f"{name} {_num(value, ' м²')}" for name, value in (
+            ("пошкоджений фасад", a.damaged_facade_m2), ("вибиті вікна", a.broken_window_m2),
+            ("пошкоджений дах", a.damaged_roof_m2)) if value]
+        if areas:
+            notes.append("Пораховано для площ: " + ", ".join(areas) + ".")
+    return notes
+
+
 def facade_notes(d, building) -> list[str]:
     """The model's assessment of the damaged facade and how the wall works follow from it."""
     from core.decision import wall_thickness
@@ -197,6 +228,11 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     pdf.set_font("dejavu", "", 9)
     pdf.multi_cell(0, 5, DISCLAIMER_UA, fill=True, new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
+    summary = summary_ua(report)
+    if summary:
+        pdf.set_font("dejavu", "B", 10)
+        pdf.multi_cell(0, 5, summary, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
 
     # 1. Views
     if images:
@@ -327,7 +363,7 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         pdf.set_font("dejavu", "B", 11)
         pdf.multi_cell(0, 6, f"Орієнтовна вартість: від {_uah(k.low)} до {_uah(k.high)}", new_x="LMARGIN",
                        new_y="NEXT")
-        notes = []
+        notes = cost_basis_ua(report)
         if k.price_source:
             notes.append(f"Джерело цін: {k.price_source}, ціни станом на {k.as_of}.")
         notes.append(f"Діапазон: враховує похибку масштабу і кількість оцінених видів ({report.views_assessed}); "
