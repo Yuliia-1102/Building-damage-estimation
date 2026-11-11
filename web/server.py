@@ -31,10 +31,11 @@ def create_app() -> FastAPI:
     static_dir.mkdir(exist_ok=True)
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-    from web.routes import applications, projects, statistics
+    from web.routes import applications, materials, projects, statistics
     app.include_router(applications.router)
     app.include_router(projects.router)
     app.include_router(statistics.router)
+    app.include_router(materials.router)
 
     @app.get("/", include_in_schema=False)
     def home():

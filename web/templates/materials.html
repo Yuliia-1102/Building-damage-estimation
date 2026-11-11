@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Ціни і матеріали{% endblock %}
+{% block nav_materials %}active{% endblock %}
+{% block content %}
+<h1>Ціни і матеріали</h1>
+<p class="muted small">Ціни не перезаписуються: нова ціна додається з датою, з якої діє, а стара лишається в історії,
+  тож попередні звіти можна відтворити. Нова ціна використовується в наступних оцінках.</p>
+
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+{% if err %}<div class="notice err">{{ err }}</div>{% endif %}
+
+<div class="tabs">
+  <a href="/materials?tab=materials" class="{{ 'active' if tab == 'materials' }}">Матеріали ({{ materials|length }})</a>
+  <a href="/materials?tab=labour" class="{{ 'active' if tab == 'labour' }}">Розцінки на роботи ({{ labour|length }})</a>
+</div>
+
+{% if tab == 'materials' %}
+<div class="panel">
+  <h2>Поточні ціни матеріалів</h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Матеріал</th><th>Од.</th><th>Ціна, грн</th><th>Діє з</th><th>Джерело</th><th>Використовується в роботах</th><th></th></tr></thead>
+    <tbody>
+    {% for m in materials %}
+      <tr {% if m.id == material_id %}class="selected"{% endif %}>
+        <td>{{ m.name }}</td>
+        <td>{{ units.get(m.unit, m.unit) }}</td>
+        <td>{{ m.price|money if m.price is not none else '—' }}</td>
+        <td>{{ m.valid_from.strftime('%d.%m.%Y') if m.valid_from else '—' }}</td>
+        <td class="muted small">{{ m.source or '—' }}</td>
+        <td class="muted small">{{ used_in.get(m.id, [])|join(', ') or '—' }}</td>
+        <td><a class="btn btn-sm" href="/materials?tab=materials&material={{ m.id }}#edit">Змінити</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="row" id="edit">
+  <div class="panel">
+    <h2>Нова ціна матеріалу</h2>
+    <form method="post" action="/materials/price">
+      <label>Матеріал</label>
+      <select name="material_id" onchange="location='/materials?tab=materials&material='+this.value+'#edit'">
+        {% for m in materials %}
+        <option value="{{ m.id }}" {% if m.id == material_id %}selected{% endif %}>{{ m.name }} ({{ units.get(m.unit, m.unit) }})</option>
+        {% endfor %}
+      </select>
+      <label>Ціна за одиницю, грн</label>
+      <input type="text" name="value" required inputmode="decimal" placeholder="наприклад 245,50">
+      <label>Діє з</label>
+      <input type="date" name="valid_from" value="{{ today }}">
+      <label>Джерело</label>
+      <input type="text" name="source" placeholder="наприклад, прайс постачальника">
+      <button class="btn btn-primary" style="margin-top:.8rem">Зберегти ціну</button>
+    </form>
+    <h3 style="margin-top:1.2rem">Історія цін</h3>
+    <table>
+      <thead><tr><th>Діє з</th><th>Ціна, грн</th><th>Джерело</th></tr></thead>
+      <tbody>
+      {% for p in m_history|reverse %}
+        <tr><td>{{ p.valid_from.strftime('%d.%m.%Y') }}</td><td>{{ p.value|money }}</td><td class="muted small">{{ p.source or '—' }}</td></tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">Цін ще немає.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Новий матеріал</h2>
+    <form method="post" action="/materials/new">
+      <label>Назва</label>
+      <input type="text" name="name" required>
+      <label>Одиниця виміру</label>
+      <select name="unit">
+        {% for k, v in units.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+      </select>
+      <label>Ціна за одиницю, грн (можна пізніше)</label>
+      <input type="text" name="value" inputmode="decimal">
+      <label>Джерело</label>
+      <input type="text" name="source">
+      <button class="btn btn-primary" style="margin-top:.8rem">Додати</button>
+    </form>
+    <p class="muted small" style="margin-top:.8rem">Новий матеріал з'явиться в оцінці, коли його пов'яжуть із видом робіт
+      (норма витрати на одиницю роботи). Це робиться в базі розробником.</p>
+  </div>
+</div>
+
+{% else %}
+<div class="panel">
+  <h2>Розцінки на роботи</h2>
+  <p class="muted small">Вартість праці за одиницю роботи, без матеріалів.</p>
+  <table>
+    <thead><tr><th>Робота</th><th>Ціна за од., грн</th><th>Діє з</th><th>Джерело</th><th></th></tr></thead>
+    <tbody>
+    {% for r, name in labour %}
+      <tr {% if r.code == work_code %}class="selected"{% endif %}>
+        <td>{{ name }}</td>
+        <td>{{ r.price|money if r.price is not none else '—' }}</td>
+        <td>{{ r.valid_from.strftime('%d.%m.%Y') if r.valid_from else '—' }}</td>
+        <td class="muted small">{{ r.source or '—' }}</td>
+        <td><a class="btn btn-sm" href="/materials?tab=labour&work={{ r.code }}#edit">Змінити</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel" id="edit">
+  <h2>Нова розцінка</h2>
+  <form method="post" action="/materials/labour">
+    <div class="row">
+      <div><label>Робота</label>
+        <select name="work_code" onchange="location='/materials?tab=labour&work='+this.value+'#edit'">
+          {% for r, name in labour %}
+          <option value="{{ r.code }}" {% if r.code == work_code %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select></div>
+      <div><label>Ціна за од., грн</label><input type="text" name="value" required inputmode="decimal"></div>
+      <div><label>Діє з</label><input type="date" name="valid_from" value="{{ today }}"></div>
+      <div><label>Джерело</label><input type="text" name="source"></div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:.8rem">Зберегти розцінку</button>
+  </form>
+  <h3 style="margin-top:1.2rem">Історія розцінок</h3>
+  <table>
+    <thead><tr><th>Діє з</th><th>Ціна, грн</th><th>Джерело</th></tr></thead>
+    <tbody>
+    {% for r in l_history|reverse %}
+      <tr><td>{{ r.valid_from.strftime('%d.%m.%Y') }}</td><td>{{ r.value|money }}</td><td class="muted small">{{ r.source or '—' }}</td></tr>
+    {% else %}
+      <tr><td colspan="3" class="muted">Розцінок ще немає.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

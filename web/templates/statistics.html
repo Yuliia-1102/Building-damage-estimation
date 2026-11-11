@@ -14,10 +14,12 @@
       {% endfor %}
     </select>
   </div>
+  {% if has_simulated %}
   <div class="f check">
     <input type="checkbox" id="is" name="include_simulated" value="1" {% if include_simulated %}checked{% endif %} onchange="this.form.submit()">
     <label for="is" style="margin:0">враховувати симульовані</label>
   </div>
+  {% endif %}
 </form>
 
 <div class="stat-tiles">
@@ -65,5 +67,5 @@
     <tr><td>Заявок без оцінки</td><td>{{ stats.no_assessment }}</td></tr>
   </table>
 </div>
-{% if not include_simulated %}<p class="muted small">Симульовані заявки не враховано. Увімкніть перемикач, щоб їх додати.</p>{% endif %}
+{% if has_simulated and not include_simulated %}<p class="muted small">Симульовані заявки не враховано. Увімкніть перемикач, щоб їх додати.</p>{% endif %}
 {% endblock %}

@@ -64,8 +64,10 @@
   <h2>Зведення</h2>
   {% if result.summary.text_ua %}
     <p style="font-size:1.05rem">{{ result.summary.text_ua }}</p>
-  {% else %}
+  {% elif result.summary.escalation == 'insufficient_data' %}
     <div class="notice warn">Недостатньо даних для категорії та вартості. Потрібні фото з інших сторін.</div>
+  {% else %}
+    <div class="notice warn">{{ STUB_UA }}</div>
   {% endif %}
   {% if result.summary.escalation_ua %}<p class="muted small">{{ result.summary.escalation_ua }}</p>{% endif %}
   {% if result.summary.errors %}
@@ -84,9 +86,12 @@
   <div class="views-grid" style="margin-top:.8rem">
     {% for v in result.views %}
     <div class="view">
-      <img class="v-overlay" src="{{ base }}/{{ v.overlay }}" alt="вид {{ v.view_id }}">
-      <img class="v-plain" src="{{ base }}/{{ v.image }}" alt="вид {{ v.view_id }}" style="display:none">
-      <div class="small muted">Вид {{ v.view_id }}{% if v.worst %} · найгірший{% endif %}</div>
+      <a class="v-overlay" href="{{ base }}/{{ v.overlay }}" target="_blank" title="Відкрити в повному розмірі">
+        <img src="{{ base }}/{{ v.overlay }}" alt="вид {{ v.view_id }} з масками"></a>
+      <a class="v-plain" href="{{ base }}/{{ v.image }}" target="_blank" title="Відкрити в повному розмірі" style="display:none">
+        <img src="{{ base }}/{{ v.image }}" alt="вид {{ v.view_id }}"></a>
+      <div class="small muted">Вид {{ v.view_id }}{% if v.worst %} · найгірший{% endif %} ·
+        натисніть, щоб відкрити в повному розмірі</div>
     </div>
     {% endfor %}
   </div>
@@ -126,7 +131,7 @@
   </form>
   <p class="muted small" style="margin-top:.6rem">
     Клас наслідків: {{ b.consequence_class or '—' }}.
-    {% if b.assumptions %}Припущення: {{ b.assumptions|join('; ') }}.{% endif %}
+    {% if b.assumptions %}Припущення: {{ b.assumptions|map('assumption_ua')|join('; ') }}.{% endif %}
   </p>
 </div>
 {% endif %}
@@ -149,7 +154,7 @@
 {% endif %}
 
 {# decision works #}
-{% if decision and decision.works %}
+{% if decision and decision.works and app.has_assessment %}
 <div class="panel">
   <h2>Роботи</h2>
   <table>
@@ -157,11 +162,15 @@
     <tbody>
     {% for w in decision.works %}
       <tr><td>{{ WORK_NAMES_UA.get(w.work_type, w.work_type) }}</td>
-          <td>{{ w.quantity|round(1) }}</td>
+          <td>{{ w.quantity|round(1) if w.quantity is not none else 'не визначено' }}</td>
           <td>{{ UNITS_UA.get(w.unit, w.unit) }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  {% if decision.works|selectattr('quantity', 'none')|list %}
+  <p class="muted small">«Не визначено»: цю поверхню видно на знімках не повністю (наприклад, дах лише смужкою),
+    тому її площу і вартість не пораховано. Потрібні знімки з іншого ракурсу або обмір на місці.</p>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -179,7 +188,7 @@
       <tr>
         <td>{{ WORK_NAMES_UA.get(l.work_type, l.work_type) }}</td>
         <td>{{ 'робота (праця)' if l.item_name == 'labour' else l.item_name }}</td>
-        <td>{{ l.quantity|round(1) }} {{ UNITS_UA.get(l.unit, l.unit) }}</td>
+        <td>{{ (l.quantity|round(1)) if l.quantity is not none else '—' }} {{ UNITS_UA.get(l.unit, l.unit) }}</td>
         <td>{{ l.unit_price|money }}</td>
         <td>{{ l.cost|money }}</td>
       </tr>

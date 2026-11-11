@@ -1,7 +1,5 @@
 {% if done %}
-<div hx-get="/applications/{{ app.id }}/progress" hx-trigger="load delay:300ms" hx-target="body" hx-select="main" hx-swap="outerHTML">
-  <div class="notice info">Оброблено. Оновлюємо сторінку…</div>
-</div>
+<div class="notice info">Обробку завершено. Оновлюємо сторінку…</div>
 {% else %}
 <div class="panel" id="progress-box"
      hx-get="/applications/{{ app.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML">

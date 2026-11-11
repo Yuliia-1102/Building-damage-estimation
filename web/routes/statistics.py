@@ -18,4 +18,4 @@ def statistics_page(request: Request):
         stats = service.statistics(s, project_id=pid, include_simulated=include_sim)
         projects = service.projects(s)
         return render("statistics.html", request, stats=stats, projects=projects,
-                      include_simulated=include_sim, project_id=pid)
+                      include_simulated=include_sim, project_id=pid, has_simulated=service.has_simulated(s))

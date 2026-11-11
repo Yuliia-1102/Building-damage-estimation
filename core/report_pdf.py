@@ -4,6 +4,7 @@ Section order follows the summary form of inspection results (Methodology No. 14
 the report outline of ДСТУ 9273:2024 (Додаток А), marked throughout as a preliminary assessment.
 """
 import io
+import re
 from datetime import date
 
 import numpy as np
@@ -36,7 +37,19 @@ ASSUMPTIONS_UA = {
     "roof type unknown, flat roof assumed": "тип даху невідомий, прийнято плаский",
     "floors not readable and no reference object: dimensions unknown, enter them":
         "поверхи не читаються і немає еталонного об'єкта: розміри невідомі, введіть їх",
+    "stub building parameters, not detected":
+        "параметри будівлі не визначено автоматично, показано умовні значення; введіть справжні",
 }
+REFERENCE_UA = {"door": "двері", "car": "автомобіль", "person": "людина"}
+_ASSUMPTION_PATTERNS = [
+    (r"floors read on frame (\d+); not readable on frame\(s\) (.+)",
+     lambda m: f"поверхи пораховано на кадрі {m[1]}; на кадрах {m[2]} їх не видно"),
+    (r"floor count uncertain \(confidence ([\d.]+)\)",
+     lambda m: f"кількість поверхів визначено неточно (впевненість {m[1]}); перевірте"),
+    (r"floors not readable, height from a (\w+) of ([\d.]+) m",
+     lambda m: f"поверхи не читаються; висоту оцінено за об'єктом «{REFERENCE_UA.get(m[1], m[1])}» "
+               f"висотою {m[2]} м"),
+]
 
 
 def walls_seen_ua(a, fmt) -> str:
@@ -100,7 +113,14 @@ def facade_notes(d, building) -> list[str]:
 
 
 def assumption_ua(text: str) -> str:
-    return ASSUMPTIONS_UA.get(text, text)
+    """A building assumption in Ukrainian, for the report and the operator's page."""
+    if text in ASSUMPTIONS_UA:
+        return ASSUMPTIONS_UA[text]
+    for pattern, ua in _ASSUMPTION_PATTERNS:
+        m = re.fullmatch(pattern, text)
+        if m:
+            return ua(m)
+    return text
 
 
 def _pct(x):
@@ -204,7 +224,10 @@ def _legend(pdf: FPDF):
     pdf.ln(2)
 
 
-STUB_UA = "Категорії не визначено: модель рішень не запускалась (Gemini вимкнено, збереженої відповіді для цих даних немає). Увімкніть Gemini і повторіть оцінку."
+STUB_UA = ("Категорію не визначено: автоматичну оцінку для цих знімків не завершено. "
+           "Пошкодження на фото позначено, але категорію, перелік робіт і вартість потрібно визначити повторною "
+           "оцінкою або під час обстеження.")
+NO_QUANTITY_UA = "не визначено"
 
 SOURCES = [
     ("Методика проведення обстеження та оформлення його результатів, наказ Мінрозвитку № 144 від 06.08.2022 — "
@@ -353,7 +376,7 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
     _h(pdf, "5. Перелік робіт і орієнтовна вартість")
     k = report.cost
     if d is None or d.is_stub:
-        _p(pdf, "Перелік робіт і вартість не визначено: вони залежать від рішення моделі.")
+        _p(pdf, "Перелік робіт і вартість не визначено: вони залежать від категорії пошкоджень.")
         k = None
     elif d.damage_category == "III":
         _p(pdf, NOT_RESTORABLE_UA)
@@ -362,8 +385,12 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
         for w in d.works:
             cost = sum(l.cost for l in k.lines if l.work_type == w.work_type) if k else None
             rows.append([WORK_NAMES_UA.get(w.work_type, w.work_type),
-                         _num(w.quantity, " " + UNITS_UA.get(w.unit, w.unit)), _uah(cost) if cost else "—"])
+                         _num(w.quantity, " " + UNITS_UA.get(w.unit, w.unit)) if w.quantity is not None
+                         else NO_QUANTITY_UA, _uah(cost) if cost else "—"])
         _table(pdf, rows, widths=[90, 40, 50])
+        if any(w.quantity is None for w in d.works):
+            _p(pdf, "Обсяг «не визначено»: цю поверхню видно на знімках не повністю (наприклад, дах лише смужкою), "
+                    "тому її площу і вартість не пораховано. Потрібні знімки з іншого ракурсу або обмір на місці.")
         if d.facade:
             _sub(pdf, "Як складено роботи на стінах")
             _bullets(pdf, facade_notes(d, report.building))

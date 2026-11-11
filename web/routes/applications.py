@@ -54,8 +54,8 @@ def board(request: Request):
         apps = service.board_applications(s, filters)
         projects = service.projects(s)
         columns = {st: [a for a in apps if a.status == st] for st in Status.BOARD}
-        return render("board.html", request, columns=columns, projects=projects,
-                      filters=filters, raw=dict(request.query_params), total=len(apps))
+        return render("board.html", request, columns=columns, projects=projects, filters=filters,
+                      raw=dict(request.query_params), total=len(apps), has_simulated=service.has_simulated(s))
 
 
 # ---------- creating ----------
@@ -133,7 +133,10 @@ def progress(app_id: int, request: Request):
         if app is None:
             return HTMLResponse("", status_code=404)
         done = app.status not in (Status.CREATED, Status.PROCESSING)
-        return render("partials/progress.html", request, app=app, done=done)
+        response = render("partials/progress.html", request, app=app, done=done)
+        if done:
+            response.headers["HX-Refresh"] = "true"   # reload the full page with the result
+        return response
 
 
 # ---------- operator actions ----------

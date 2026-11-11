@@ -190,6 +190,11 @@ def board_applications(session: Session, filters: dict | None = None) -> list[Ap
     return list(session.scalars(stmt).all())
 
 
+def has_simulated(session: Session) -> bool:
+    """True when any application holds a simulator result; the "simulated" toggles are shown only then."""
+    return session.scalar(select(Application.id).where(Application.simulated.is_(True)).limit(1)) is not None
+
+
 def projects(session: Session) -> list[Project]:
     return list(session.scalars(select(Project).order_by(Project.name)).all())
 

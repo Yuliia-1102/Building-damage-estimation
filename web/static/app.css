@@ -100,6 +100,15 @@ th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;l
 .tile .n{font-size:1.7rem;font-weight:800;color:var(--navy);line-height:1.1}
 .tile .l{color:var(--muted);font-size:.82rem;margin-top:.15rem}
 
-.views-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem}
+.views-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:1rem}
 .view img{width:100%;border-radius:.6rem;border:1px solid var(--line)}
 .empty{color:var(--muted);text-align:center;padding:2rem;border:1px dashed var(--line);border-radius:var(--radius)}
+
+/* full-size views, prices page */
+.view a{display:block;cursor:zoom-in}
+.tabs{display:flex;gap:.4rem;margin:.4rem 0 1rem}
+.tabs a{padding:.45rem .9rem;border-radius:.55rem;border:1px solid var(--line);background:#fff;color:var(--muted);font-weight:600}
+.tabs a.active{background:var(--navy);border-color:var(--navy);color:#fff}
+.tabs a:hover{text-decoration:none}
+tr.selected td{background:#F3F7FC}
+.table-scroll{overflow-x:auto}

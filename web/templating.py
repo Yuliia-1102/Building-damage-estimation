@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from core import reference
+from core.report_pdf import STUB_UA, assumption_ua
 from web.models import UA_STATUS, Status
 
 HERE = Path(__file__).resolve().parent
@@ -82,6 +83,7 @@ env.filters["duration"] = duration
 env.filters["pct"] = pct
 env.filters["m2"] = m2
 env.filters["num"] = num
+env.filters["assumption_ua"] = assumption_ua
 
 from web import config as _webconfig  # noqa: E402
 
@@ -96,6 +98,7 @@ env.globals.update(
     UNITS_UA=getattr(reference, "UNITS_UA", {}),
     STRUCTURE_NAMES_UA=getattr(reference, "STRUCTURE_NAMES_UA", {}),
     DISCLAIMER_UA=getattr(reference, "DISCLAIMER_UA", ""),
+    STUB_UA=STUB_UA,
 )
 
 
