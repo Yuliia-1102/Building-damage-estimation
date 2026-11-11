@@ -34,7 +34,7 @@ from core.reference import (CONDITION_NAMES_UA, DAMAGE_NAMES_UA, DAMAGE_RECOMMEN
                             WORK_NAMES_UA)
 from core.provenance import consequence_note, parameter_rows  # noqa: E402
 from core.report_pdf import (STUB_UA, COLOR_NAMES_UA, LEGEND_UA, assumption_ua, build_pdf,  # noqa: E402
-                             cost_basis_ua, facade_notes, summary_ua, walls_seen_ua)
+                             cost_basis_ua, summary_ua, wall_steps, walls_seen_ua)
 
 st.set_page_config(page_title="Оцінка пошкоджень будівлі", page_icon="🏚️", layout="wide")
 
@@ -428,8 +428,8 @@ def cost_section(report):
             st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
                          column_config={"Вартість, грн": st.column_config.NumberColumn(format="localized")})
     if d.facade:
-        with st.expander("Як складено роботи на стінах"):
-            st.markdown("\n".join("- " + n for n in facade_notes(d, report.building)))
+        with st.expander("Як пораховано роботи на стінах"):
+            st.markdown("\n\n".join(wall_steps(d, report.building, report.areas)))
     if k and k.lines:
         with st.expander("Розрахунок по позиціях: матеріали і робота"):
             st.dataframe(pd.DataFrame([{

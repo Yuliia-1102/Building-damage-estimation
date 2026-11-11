@@ -170,6 +170,10 @@
     {% endfor %}
     </tbody>
   </table>
+  {% if wall %}
+  <h3 style="margin-top:1rem">Як пораховано роботи на стінах</h3>
+  {% for line in wall %}<p class="small" style="margin:.3rem 0">{{ line }}</p>{% endfor %}
+  {% endif %}
   {% if decision.works|selectattr('quantity', 'none')|list %}
   <p class="muted small">«Не визначено»: цю поверхню видно на знімках не повністю (наприклад, дах лише смужкою),
     тому її площу і вартість не пораховано. Потрібні знімки з іншого ракурсу або обмір на місці.</p>
