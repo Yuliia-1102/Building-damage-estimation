@@ -47,3 +47,21 @@ def test_cost_basis_without_labour_rates():
 
 def test_pdf_builds_with_the_summary():
     assert build_pdf(report()).startswith(b"%PDF")
+
+
+def test_wall_steps_in_square_metres():
+    from core.report_pdf import wall_steps
+    from core.types import BuildingParams, DamagedAreas, Decision, FacadeState
+    d = Decision(damage_category="II", condition_category=3, confidence=0.8, works=[],
+                 facade=FacadeState(window_openings_share=0.05, destroyed_wall_share=0.9, insulated=False))
+    b = BuildingParams(floors=4, floor_height_m=3, width_m=20, depth_m=12, roof_shape_coef=1, structure_type="brick")
+    a = DamagedAreas(wall_area_m2=1000, roof_area_m2=None, damaged_facade_m2=100, broken_window_m2=0,
+                     damaged_roof_m2=None)
+    lines = wall_steps(d, b, a)
+    assert lines[0] == "Пошкоджена ділянка фасаду: 100 м²."
+    assert lines[1].startswith("1. З них 5,0 м² (5%) — віконні прорізи")
+    assert "Решта 95 м² — стіна. З неї 86 м² (90%) зруйновано наскрізь" in lines[2]
+    assert "32,5 м³" in lines[2] and "0,38 м" in lines[2]
+    assert lines[3].startswith("3. Штукатурка і фарбування — на всі 95 м² стіни, з риштуванням")
+    no_area = wall_steps(d, b, None)
+    assert "лише частки" in no_area[0] and "90%" in no_area[2]

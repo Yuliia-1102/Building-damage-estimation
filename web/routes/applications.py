@@ -118,8 +118,20 @@ def detail(app_id: int, request: Request):
         duplicate_of = service.get(s, app.duplicate_of_id) if app.duplicate_of_id else None
         show_dup_warning = request.query_params.get("dup") == "1" and app.is_duplicate
         projects = service.projects(s)
-        return render("application.html", request, app=app, result=result,
+        return render("application.html", request, app=app, result=result, wall=_wall_steps(result, app),
                       duplicate_of=duplicate_of, show_dup_warning=show_dup_warning, projects=projects)
+
+
+def _wall_steps(result: dict | None, app: Application) -> list[str]:
+    """How the wall works were computed, in square metres (the same text as in the PDF)."""
+    if not result or not app.has_assessment:
+        return []
+    from core.report_pdf import wall_steps
+    from core.service import report_from_dict
+    report = report_from_dict(result["report"])
+    if report.decision is None or report.decision.facade is None or not report.decision.works:
+        return []
+    return wall_steps(report.decision, report.building, report.areas)
 
 
 @router.get("/applications/{app_id}/progress", response_class=HTMLResponse)

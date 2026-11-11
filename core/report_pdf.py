@@ -95,21 +95,60 @@ def cost_basis_ua(report: Report) -> list[str]:
     return notes
 
 
-def facade_notes(d, building) -> list[str]:
-    """The model's assessment of the damaged facade and how the wall works follow from it."""
+WALL_STEPS_TITLE = "Як пораховано роботи на стінах"
+
+
+def _ua_num(x: float, digits: int = 0) -> str:
+    """12345.6 -> '12 346', 2.46 with digits=1 -> '2,5' (Ukrainian separators)."""
+    return f"{x:,.{digits}f}".replace(",", " ").replace(".", ",")
+
+
+def _m2(x: float) -> str:
+    return _ua_num(x, 1 if x < 10 else 0) + " м²"
+
+
+def wall_steps(d, building, areas) -> list[str]:
+    """How the wall works follow from the damaged facade, step by step and in square metres, for a reader who
+    checks the numbers: the window openings inside it, the wall destroyed through, the finish.
+    The first line is the damaged area, the last one says where the shares come from."""
     from core.decision import wall_thickness
     f = d.facade
+    total = areas.damaged_facade_m2 if areas else None
+    w, x = f.window_openings_share, f.destroyed_wall_share
     t = wall_thickness(building)
     kind = STRUCTURE_NAMES_UA.get((building.structure_type if building else None) or "unknown", "невідомо")
-    return [
-        f"Віконні прорізи: {f.window_openings_share:.0%} пошкодженої площі фасаду (оцінка моделі за фото; "
-        f"сегментація позначає вікна у зруйнованих стінах як пошкодження фасаду). Вони пораховані у віконних "
-        f"роботах, а не в стінових.",
-        f"Зруйновано наскрізь: {f.destroyed_wall_share:.0%} решти стіни (оцінка моделі). На цій частині: "
-        f"розбирання і вивіз уламків, кладка в м³ за товщиною стіни {t:.2f} м ({kind}), далі оздоблення.",
-        f"Оздоблення і фарбування: на всій пошкодженій стіні; "
-        f"{'система утеплення з декоративною штукатуркою' if f.insulated else 'штукатурка'}.",
-    ]
+    finish = "утеплення з декоративною штукатуркою" if f.insulated else "штукатурка"
+    scaffolding = building is None or building.floors is None or building.floors > 1
+
+    if total is None:      # dimensions unknown: the same steps in shares only
+        lines = ["Площу пошкодженої ділянки фасаду не визначено (невідомі розміри будівлі), тому нижче — лише частки."]
+        lines.append(f"1. Віконні прорізи — {w:.0%} пошкодженої ділянки. Їх пораховано як заміну вікон."
+                     if w > 0 else "1. Віконних прорізів у пошкодженій ділянці немає.")
+        lines.append(f"2. Решта — стіна. З неї {x:.0%} зруйновано наскрізь: розбирання, вивезення уламків і нова "
+                     f"кладка (тип конструкції: {kind}, товщина стіни {_ua_num(t, 2)} м)."
+                     if x > 0 else "2. Решта — стіна. Наскрізних руйнувань немає: стіну не розбирають і не "
+                                   "перекладають.")
+        lines.append(f"3. {finish.capitalize()} і фарбування — на всю пошкоджену стіну"
+                     + (", з риштуванням." if scaffolding else "."))
+    else:
+        windows = total * w
+        wall = total - windows
+        destroyed = wall * x
+        lines = [f"Пошкоджена ділянка фасаду: {_m2(total)}."]
+        lines.append(f"1. З них {_m2(windows)} ({w:.0%}) — віконні прорізи у зруйнованій стіні. "
+                     f"Їх пораховано як заміну вікон." if windows > 0
+                     else "1. Віконних прорізів у пошкодженій ділянці немає.")
+        if destroyed > 0:
+            lines.append(f"2. Решта {_m2(wall)} — стіна. З неї {_m2(destroyed)} ({x:.0%}) зруйновано наскрізь: "
+                         f"розбирання, вивезення уламків і нова кладка — {_ua_num(destroyed * t, 1)} м³ "
+                         f"(тип конструкції: {kind}, товщина стіни {_ua_num(t, 2)} м).")
+        else:
+            lines.append(f"2. Решта {_m2(wall)} — стіна. Наскрізних руйнувань немає: стіну не розбирають і не "
+                         f"перекладають.")
+        lines.append(f"3. {finish.capitalize()} і фарбування — на всі {_m2(wall)} стіни"
+                     + (", з риштуванням на ту саму площу." if scaffolding else "."))
+    lines.append("Частки віконних прорізів і наскрізних руйнувань визначено автоматично за фото.")
+    return lines
 
 
 def assumption_ua(text: str) -> str:
@@ -392,8 +431,9 @@ def build_pdf(report: Report, images: dict[int, np.ndarray] | None = None) -> by
             _p(pdf, "Обсяг «не визначено»: цю поверхню видно на знімках не повністю (наприклад, дах лише смужкою), "
                     "тому її площу і вартість не пораховано. Потрібні знімки з іншого ракурсу або обмір на місці.")
         if d.facade:
-            _sub(pdf, "Як складено роботи на стінах")
-            _bullets(pdf, facade_notes(d, report.building))
+            _sub(pdf, WALL_STEPS_TITLE)
+            for line in wall_steps(d, report.building, report.areas):
+                _p(pdf, line)
     if k:
         pdf.set_font("dejavu", "B", 11)
         pdf.multi_cell(0, 6, f"Орієнтовна вартість: від {_uah(k.low)} до {_uah(k.high)}", new_x="LMARGIN",
