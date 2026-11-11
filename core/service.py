@@ -105,20 +105,44 @@ def _delay() -> tuple[float, float]:
     return float(lo), float(hi or lo)
 
 
+class ProcessingError(RuntimeError):
+    """Production mode: a step the result cannot do without failed (the language model did not answer).
+    The application goes to Failed with this Ukrainian message, and the operator can retry it."""
+
+    def __init__(self, user_message: str):
+        super().__init__(user_message)
+        self.user_message = user_message
+
+
 class Engine:
-    """Loads the models once (a worker keeps one Engine for its lifetime); process() is then 10-60 s per view."""
+    """Loads the models once (a worker keeps one Engine for its lifetime); process() is then 10-60 s per view.
+
+    llm="production" is the working product: every assessment is a new Gemini request (no answer cache, no
+    stub answers, no development data), the segmentation weights are required, and a failed request fails
+    the application instead of producing a partial result. cache_root keeps its mask cache apart."""
 
     name = "real"
 
-    def __init__(self, llm: str | None = None):
+    def __init__(self, llm: str | None = None, cache_root: Path | None = None):
         self.llm = llm or os.environ.get("DAMAGE_LLM_MODE", "offline")
-        if self.llm not in ("offline", "gemini", "claude"):
-            raise ValueError(f"DAMAGE_LLM_MODE must be offline, gemini or claude, not {self.llm!r}")
+        if self.llm not in ("offline", "gemini", "claude", "production"):
+            raise ValueError(f"DAMAGE_LLM_MODE must be offline, gemini, claude or production, not {self.llm!r}")
+        self.production = self.llm == "production"
+        if self.production:
+            self.name = "production"
+            if os.environ.get("DAMAGE_LLM"):
+                raise RuntimeError("production mode uses Gemini only: unset DAMAGE_LLM")
+        cache_root = cache_root or (Path(os.environ["DAMAGE_CACHE_DIR"]) if os.environ.get("DAMAGE_CACHE_DIR")
+                                    else None)
+        if self.production and cache_root is None:
+            raise RuntimeError("production mode needs its own cache folder (DAMAGE_CACHE_DIR)")
         weights = config.path("weights")
+        if self.production and not weights.exists():
+            raise RuntimeError(f"production mode needs the segmentation weights: {weights}")
         if weights.exists():
             from core.cache import CachedSegmenter, quick_segmenter
             from models.dinov2_unet import DinoV2Segmenter
-            self.segmenter = CachedSegmenter(DinoV2Segmenter(), model_id=weights.stem)
+            self.segmenter = CachedSegmenter(DinoV2Segmenter(), model_id=weights.stem, root=cache_root)
             self.quick = quick_segmenter(self.segmenter)
             self.segmentation_source = "model"
         else:
@@ -128,6 +152,11 @@ class Engine:
         if self.llm == "offline":
             from models.offline import CachedOrStubBuilding, CachedOrStubDecision
             self.building, self.decision = CachedOrStubBuilding(), CachedOrStubDecision()
+        elif self.production:
+            from models.gemini_building import GeminiBuildingEstimator
+            from models.gemini_decision import GeminiDecisionLayer
+            self.building = GeminiBuildingEstimator(model=config.get("decision", "building_model"), use_cache=False)
+            self.decision = GeminiDecisionLayer(model=config.get("decision", "model"), use_cache=False)
         else:
             if self.llm == "claude":
                 os.environ.setdefault("DAMAGE_LLM", "claude-sonnet-5-5")
@@ -143,6 +172,16 @@ class Engine:
         if self.llm == "claude":
             return "claude-dev"
         return "cache" if layer.llm.last_from_cache else "gemini"
+
+    def _check(self, report: Report) -> None:
+        """Production: no result without the model's answers. A failed request is not a partial report."""
+        if not self.production:
+            return
+        failed = [e for e in report.errors if e.startswith(("building parameters", "decision layer"))]
+        if failed or report.decision is None:
+            log.error("production assessment failed: %s", failed or "no decision")
+            raise ProcessingError("Не вдалося отримати відповідь сервісу оцінювання (зв'язок, ліміт запитів або "
+                                  "перевантаження). Спробуйте повторити обробку за кілька хвилин.")
 
     def process(self, inputs: list[Path], out_dir: Path, case_id: str | None = None,
                 progress: Progress | None = None) -> dict:
@@ -174,6 +213,7 @@ class Engine:
             progress(0.82, "Параметри будівлі, категорії, роботи і вартість")
             report = evaluate(seg, building_estimator=self.building, decision_layer=self.decision,
                               price_source=self.prices)
+            self._check(report)
         sources = {"segmentation": self.segmentation_source,
                    "building": self._source(self.building) if report.building else "",
                    "decision": self._source(self.decision) if report.decision else ""}
@@ -208,6 +248,7 @@ class Engine:
         # chosen works, recompute quantities and cost. With paid requests the model is asked again.
         layer = RecordedDecision(report.decision) if self.llm == "offline" else self.decision
         new = evaluate(seg, building=building, decision_layer=layer, price_source=self.prices)
+        self._check(new)
         sources = dict(data["sources"], building="operator",
                        decision=(data["sources"].get("decision", "") if self.llm == "offline"
                                  else self._source(self.decision)) if new.decision else "")
@@ -353,12 +394,16 @@ _engine = None
 
 def get_engine():
     """One engine per process. DAMAGE_ENGINE=simulator (with DAMAGE_PACK=<pack folder>) needs no weights,
-    no key and no torch; anything else loads the real model."""
+    no key and no torch; DAMAGE_ENGINE=production is the working product (Gemini only, no cache, see Engine);
+    anything else loads the real model with DAMAGE_LLM_MODE (offline by default)."""
     global _engine
     if _engine is None:
-        if os.environ.get("DAMAGE_ENGINE", "real") == "simulator":
+        kind = os.environ.get("DAMAGE_ENGINE", "real")
+        if kind == "simulator":
             from core.simulator import SimulatedEngine
             _engine = SimulatedEngine()
+        elif kind == "production":
+            _engine = Engine(llm="production")
         else:
             _engine = Engine()
     return _engine

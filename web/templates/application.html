@@ -129,6 +129,9 @@
       </div>
     </div>
   </form>
+  {% if ENGINE_MODE == 'production' %}
+  <p class="muted small">Перерахунок заново визначає категорію і роботи: це новий запит до сервісу оцінювання.</p>
+  {% endif %}
   <p class="muted small" style="margin-top:.6rem">
     Клас наслідків: {{ b.consequence_class or '—' }}.
     {% if b.assumptions %}Припущення: {{ b.assumptions|map('assumption_ua')|join('; ') }}.{% endif %}

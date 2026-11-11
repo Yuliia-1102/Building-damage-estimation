@@ -33,3 +33,6 @@ output/
 
 # Development pack of recorded cases (tools/make_pack.py), shared as devpack.zip
 devpack/
+
+# Production deployment of the web system (scripts/run_production.sh): applications, uploads, results
+data_prod/

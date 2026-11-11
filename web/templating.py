@@ -86,6 +86,22 @@ env.filters["num"] = num
 env.filters["assumption_ua"] = assumption_ua
 
 from web import config as _webconfig  # noqa: E402
+import os  # noqa: E402
+
+
+def engine_mode() -> tuple[str, str]:
+    """(key, Ukrainian label) of the engine this deployment runs, shown in the header."""
+    kind = os.environ.get("DAMAGE_ENGINE", "real")
+    if kind == "production":
+        return "production", "робочий режим"
+    if kind == "simulator":
+        return "simulator", "розробка: симулятор"
+    if os.environ.get("DAMAGE_LLM_MODE", "offline") == "offline":
+        return "offline", "розробка: збережені відповіді"
+    return "dev", "розробка"
+
+
+ENGINE_MODE, ENGINE_MODE_UA = engine_mode()
 
 env.globals.update(
     Status=Status,
@@ -99,6 +115,8 @@ env.globals.update(
     STRUCTURE_NAMES_UA=getattr(reference, "STRUCTURE_NAMES_UA", {}),
     DISCLAIMER_UA=getattr(reference, "DISCLAIMER_UA", ""),
     STUB_UA=STUB_UA,
+    ENGINE_MODE=ENGINE_MODE,
+    ENGINE_MODE_UA=ENGINE_MODE_UA,
 )
 
 

@@ -74,7 +74,7 @@ def process_one(engine, app_id: int) -> None:
         _finalize_failure(app_id, f"Неприйнятні файли: {e}")
     except Exception as e:   # noqa: BLE001  - any failure => Failed, operator can retry
         log.exception("application %s failed", app_id)
-        _finalize_failure(app_id, f"{type(e).__name__}: {e}")
+        _finalize_failure(app_id, getattr(e, "user_message", None) or f"{type(e).__name__}: {e}")
     else:
         _finalize_success(app_id, data, out_dir)
         log.info("application %s processed", app_id)
