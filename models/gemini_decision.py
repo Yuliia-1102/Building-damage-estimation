@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 from core.decision import apply_category_rules, escalation_level, match_roof_type, works_with_quantities
 from core.reference import (CONDITION_CATEGORIES, DAMAGE_CATEGORIES, MODEL_WORKS, WORK_TYPES, WORK_TYPES_BY_CODE,
                             roof_covering_category)
-from core import cache, config
+from core import config
 from core.imageio import building_box, overlay_for_model
 from core.types import BuildingParams, CombinedRatios, DamagedAreas, Decision, FacadeState
 from models.gemini_client import GeminiJSON
@@ -180,8 +180,8 @@ def view_jpeg(image, mask, max_side: int = 1024) -> bytes:
 
 
 class GeminiDecisionLayer:
-    def __init__(self, client=None, model: str | None = None, retries: int = 2, use_cache: bool = True):
-        self.llm = GeminiJSON(client=client, model=model, retries=retries, use_cache=use_cache)
+    def __init__(self, client=None, model: str | None = None, retries: int = 2):
+        self.llm = GeminiJSON(client=client, model=model, retries=retries)
         self.last_images: list[bytes] = []       # what was shown to the model, saved with test runs
 
     def ask(self, prompt: str, images: list[bytes] = ()) -> DecisionResponse:
@@ -189,8 +189,7 @@ class GeminiDecisionLayer:
         if images:
             from google.genai import types
             parts += [types.Part.from_bytes(data=d, mime_type="image/jpeg") for d in images]
-        key = [prompt, *(cache.text_key(d.hex()) for d in images)]
-        return self.llm.ask(parts, DecisionResponse, SYSTEM_INSTRUCTION, "decisions", key)
+        return self.llm.ask(parts, DecisionResponse, SYSTEM_INSTRUCTION, "decisions")
 
     def decide(self, ratios: CombinedRatios, areas: DamagedAreas | None,
                building: BuildingParams | None, views: dict | None = None) -> Decision:

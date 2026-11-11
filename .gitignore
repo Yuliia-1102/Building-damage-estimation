@@ -9,7 +9,7 @@ __pycache__/
 .env
 
 # Model weights
-weights/
+weights
 *.pt
 *.pth
 *.onnx

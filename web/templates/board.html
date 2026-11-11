@@ -61,13 +61,6 @@
     <label>до</label>
     <input type="date" name="date_to" value="{{ raw.get('date_to','') }}">
   </div>
-  {% if has_simulated %}
-  <div class="f check" style="max-width:170px">
-    <input type="checkbox" id="sim" name="show_simulated" value="1" {% if filters.show_simulated %}checked{% endif %}
-           onchange="this.form.submit()">
-    <label for="sim" style="margin:0">показувати симульовані</label>
-  </div>
-  {% endif %}
   <div class="f" style="max-width:120px">
     <button class="btn btn-primary" type="submit">Застосувати</button>
   </div>
@@ -76,7 +69,7 @@
   </div>
 </form>
 
-<p class="muted small">Знайдено заявок: {{ total }}{% if has_simulated and not filters.show_simulated %} (симульовані приховано){% endif %}.</p>
+<p class="muted small">Знайдено заявок: {{ total }}.</p>
 
 <div class="board">
   {% for status in Status.BOARD %}

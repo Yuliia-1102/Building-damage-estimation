@@ -5,7 +5,7 @@ from PIL import Image
 
 from core.pipeline import assess
 from core.types import Case, View
-from models.stub import StubBuildingParams, StubDecisionLayer, StubSegmenter
+from tests.doubles import StubBuildingParams, StubDecisionLayer, StubSegmenter
 from pricedb import create_db, load_seed, session_factory, sqlite_url, MaterialsDbPriceSource
 
 

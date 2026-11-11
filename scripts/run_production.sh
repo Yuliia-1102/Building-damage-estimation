@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# The working product: the web system with Gemini only. Every assessment is a new paid request:
-# no answer cache, no stub answers, no development pack. Its applications, uploads, results and mask cache
-# live in data_prod/, apart from the development system in data/. Prices: the shared data/materials.db.
+# Start the web system: the server and the background worker. Every assessment is a new paid Gemini request.
+# Applications, uploads, results and the mask cache live in data_prod/. Prices: data/materials.db.
 #
 #   scripts/run_production.sh            # http://localhost:8001, Ctrl+C stops the server and the worker
 #   PORT=8002 scripts/run_production.sh
@@ -19,10 +18,8 @@ if ! ls weights/*.pt >/dev/null 2>&1; then
   exit 1
 fi
 
-export DAMAGE_ENGINE=production
 export DAMAGE_WEB_DATA="$ROOT/data_prod"
 export DAMAGE_CACHE_DIR="$ROOT/data_prod/cache"
-unset DAMAGE_LLM DAMAGE_LLM_MODE DAMAGE_PACK
 mkdir -p "$DAMAGE_WEB_DATA"
 
 uv run python -m web.worker &
@@ -30,7 +27,7 @@ WORKER=$!
 trap 'kill $WORKER 2>/dev/null; wait $WORKER 2>/dev/null' EXIT INT TERM
 
 echo
-echo "  Робочий режим: http://localhost:$PORT"
+echo "  Оцінка пошкоджень: http://localhost:$PORT"
 echo "  Кожна нова заявка і кожен перерахунок - платні запити до Gemini."
 echo "  Облік запитів: output/gemini_usage.csv. Зупинити: Ctrl+C."
 echo

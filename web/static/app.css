@@ -112,6 +112,3 @@ th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;l
 .tabs a:hover{text-decoration:none}
 tr.selected td{background:#F3F7FC}
 .table-scroll{overflow-x:auto}
-.mode{font-size:.72rem;font-weight:700;border-radius:1rem;padding:.12rem .6rem;margin-left:-.8rem;white-space:nowrap}
-.mode-production{background:#E7F3EA;color:#1F7A33}
-.mode-simulator,.mode-offline,.mode-dev{background:#FCF1E2;color:#9A5A17}

@@ -1,7 +1,7 @@
-"""Shared Gemini plumbing: one structured JSON answer, validated, retried and cached.
+"""Shared Gemini plumbing: one structured JSON answer, validated and retried.
 
 Used by the decision layer and by the building parameters estimator, so both get the same
-schema validation (task 6.1), retry on a malformed answer (6.1.3) and answer cache (6.2.3).
+schema validation and retry on a malformed answer. Every call is a new request: answers are not cached.
 """
 import csv
 import json
@@ -12,7 +12,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ValidationError
 
-from core import cache, config
+from core import config
 
 log = logging.getLogger(__name__)
 
@@ -27,19 +27,15 @@ def make_client():
 
 
 def llm_model(kind: str) -> str:
-    """The model for 'decision' or 'building'. DAMAGE_LLM (e.g. claude-sonnet-5-5) overrides both while the
-    system is developed with Claude subagents instead of Gemini (models/claude_bridge.py)."""
-    return os.environ.get("DAMAGE_LLM") or config.get("decision", "model" if kind == "decision" else "building_model")
+    """The Gemini model for 'decision' or 'building' (config.toml, [decision])."""
+    return config.get("decision", "model" if kind == "decision" else "building_model")
 
 
 class GeminiJSON:
-    def __init__(self, client=None, model: str | None = None, retries: int = 2, use_cache: bool = True):
+    def __init__(self, client=None, model: str | None = None, retries: int = 2):
         self.model = model or llm_model("decision")
-        self.bridge = self.model.startswith("claude-")      # no API: requests go to subagents through files
-        self.client = client or (None if self.bridge else make_client())
+        self.client = client or make_client()
         self.retries = retries
-        self.use_cache = use_cache
-        self.last_from_cache: bool | None = None    # whether the last answer came from the cache (no request)
 
     def _call(self, contents: list, schema: type[BaseModel], system: str) -> str:
         """One request; on 429 (rate limit) or 503 (overloaded) waits 2, 4, 8 ... seconds and tries again."""
@@ -88,31 +84,14 @@ class GeminiJSON:
                 w.writeheader()
             w.writerow(row)
 
-    def ask(self, contents: list, schema: type[BaseModel], system: str, namespace: str, key_parts: list[str]):
-        """contents: text and image parts for the request. key_parts: what identifies the request in the cache
-        (the prompt text and the hashes of any images)."""
-        key = cache.text_key("\n".join([self.model, system, *key_parts]))
-        if self.use_cache and (hit := cache.get_json(namespace, key)) is not None:
-            self.last_from_cache = True
-            return schema.model_validate(hit)
-        self.last_from_cache = False
-        if self.bridge and self.client is None:
-            from models.claude_bridge import AnswerPending, export
-            folder = export(self.model, namespace, key, contents, schema, system)
-            raise AnswerPending(f"waiting for a {self.model} answer: {folder.name}")
-
+    def ask(self, contents: list, schema: type[BaseModel], system: str, namespace: str):
+        """contents: text and image parts for the request. namespace names the request in the log."""
         last_error = None
         for attempt in range(1, self.retries + 2):
             raw = self._call(contents, schema, system)
             try:
-                answer = schema.model_validate_json(raw)
-                break
+                return schema.model_validate_json(raw)
             except ValidationError as e:
                 last_error = e
                 log.warning("%s attempt %d: response does not match the schema: %s", namespace, attempt, raw)
-        else:
-            raise ValueError(f"no valid {namespace} answer after {self.retries + 1} attempts") from last_error
-
-        if self.use_cache:
-            cache.put_json(namespace, key, json.loads(answer.model_dump_json()))
-        return answer
+        raise ValueError(f"no valid {namespace} answer after {self.retries + 1} attempts") from last_error

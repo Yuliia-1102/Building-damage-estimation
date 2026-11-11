@@ -1,7 +1,6 @@
 """Background worker: the only place the engine runs. Start it in its own process:
 
-    DAMAGE_ENGINE=simulator python -m web.worker          # development
-    DAMAGE_ENGINE=real      python -m web.worker          # at integration, with the model weights present
+    python -m web.worker          # or scripts/run_production.sh, which starts the server and the worker
 
 It loops: take the oldest queued application, mark it Processing, run core.service.get_engine().process(),
 save the result folder and copy the summary into the row. It talks to the web server only through the
@@ -31,7 +30,7 @@ def _finalize_success(app_id: int, data: dict, result_dir: Path) -> None:
             return
         app.result_dir = str(result_dir)
         app.mode = data.get("mode", app.mode)
-        app.apply_summary(data["summary"], data.get("revision", 1), data.get("simulated", False))
+        app.apply_summary(data["summary"], data.get("revision", 1))
         app.updated_at = datetime.now()
         service.transition(s, app, Status.PROCESSED)
 

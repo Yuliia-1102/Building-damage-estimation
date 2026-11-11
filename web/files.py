@@ -2,7 +2,7 @@
 
 Validation mirrors the evaluation side (core.service.input_mode): only known image/video extensions, and either
 one video or several photos, never mixed. SHA-256 is computed with core.service.file_sha256 (the same hash the
-duplicate control and the simulator use).
+duplicate control uses).
 """
 from pathlib import Path
 

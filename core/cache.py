@@ -1,10 +1,9 @@
-"""On-disk cache for model outputs (task 2.6): masks by image content, decision responses by prompt.
+"""On-disk cache of segmentation masks by image content: the same file is not segmented twice.
 
 The key is a hash of the file content, not its name, so a renamed copy is still a hit and an
-edited photo is a miss. Delete the cache folder (or use cli.py --clear-cache) to reset it.
+edited photo is a miss. Delete the cache folder to reset it. Language model answers are never cached.
 """
 import hashlib
-import json
 import logging
 import shutil
 from pathlib import Path
@@ -28,10 +27,6 @@ def clear() -> None:
 
 def file_key(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-def text_key(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 class CachedSegmenter:
@@ -63,14 +58,3 @@ def quick_segmenter(full: CachedSegmenter):
     """The cached quick segmenter (view selection) sharing the weights of a cached DinoV2Segmenter."""
     from models.dinov2_unet import QuickSegmenter
     return CachedSegmenter(QuickSegmenter(full.inner), model_id=full.dir.name + "_quick518")
-
-
-def get_json(namespace: str, key: str, root: Path | None = None) -> dict | None:
-    path = (root or cache_dir()) / namespace / f"{key}.json"
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-
-
-def put_json(namespace: str, key: str, value: dict, root: Path | None = None) -> None:
-    path = (root or cache_dir()) / namespace / f"{key}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")

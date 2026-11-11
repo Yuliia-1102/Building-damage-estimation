@@ -88,7 +88,6 @@ class Application(Base):
     cost_low: Mapped[int | None] = mapped_column(Integer, default=None)
     cost_high: Mapped[int | None] = mapped_column(Integer, default=None)
     cost_total: Mapped[int | None] = mapped_column(Integer, default=None)
-    simulated: Mapped[bool] = mapped_column(default=False, index=True)
     revision: Mapped[int] = mapped_column(Integer, default=1)
 
     project: Mapped[Project | None] = relationship(back_populates="applications")
@@ -116,7 +115,7 @@ class Application(Base):
     def status_ua(self) -> str:
         return UA_STATUS.get(self.status, self.status)
 
-    def apply_summary(self, summary: dict, revision: int, simulated: bool) -> None:
+    def apply_summary(self, summary: dict, revision: int) -> None:
         """Copy the fields the board and statistics need out of result.json['summary']."""
         self.has_assessment = bool(summary.get("has_assessment"))
         self.damage_category = summary.get("damage_category")
@@ -126,7 +125,6 @@ class Application(Base):
         self.cost_low = summary.get("cost_low")
         self.cost_high = summary.get("cost_high")
         self.cost_total = summary.get("cost_total")
-        self.simulated = bool(simulated)
         self.revision = revision
 
 

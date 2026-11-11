@@ -5,7 +5,7 @@ from core.geometry import damaged_areas
 from core.pipeline import evaluate, segment_case
 from core.types import BuildingParams, CombinedRatios, Case, FacadeState, View
 from models.gemini_building import assumed_depth
-from models.stub import StubBuildingParams, StubDecisionLayer, StubSegmenter
+from tests.doubles import StubBuildingParams, StubDecisionLayer, StubSegmenter
 
 
 def test_category_one_masonry_only_for_a_local_breach():

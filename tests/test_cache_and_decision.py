@@ -9,7 +9,7 @@ from core import cache
 from core.decision import escalation_level, works_with_quantities
 from core.types import CombinedRatios, DamagedAreas
 from models.gemini_decision import GeminiDecisionLayer, build_prompt
-from models.stub import StubSegmenter
+from tests.doubles import StubSegmenter
 
 
 @pytest.fixture(autouse=True)
@@ -83,12 +83,12 @@ def test_unknown_work_type_is_rejected():
         GeminiDecisionLayer(client=FakeClient(bad, bad, bad), model="fake").decide(RATIOS, AREAS, None)
 
 
-def test_same_prompt_is_answered_from_cache():
-    client = FakeClient(GOOD)
+def test_every_assessment_is_a_new_request():
+    client = FakeClient(GOOD, GOOD)
     layer = GeminiDecisionLayer(client=client, model="fake")
     layer.decide(RATIOS, AREAS, None)
     layer.decide(RATIOS, AREAS, None)
-    assert client.calls == 1
+    assert client.calls == 2            # no answer cache
 
 
 def test_prompt_marks_unseen_surface():
@@ -141,7 +141,7 @@ def test_roof_works_follow_the_roof_type():
     assert match_roof_type(codes, None) == codes
 
 
-def test_decision_shows_the_worst_views_and_caches_by_image():
+def test_decision_shows_the_worst_views():
     from core.types import Cls
     image = np.full((60, 80, 3), 120, np.uint8)
     mask = np.full((60, 80), Cls.FACADE, np.uint8)
@@ -156,11 +156,6 @@ def test_decision_shows_the_worst_views_and_caches_by_image():
     layer.decide(ratios, AREAS, None, views=views)
     assert len(seen) == 1 and len(seen[0]) == 4            # prompt + 3 images
     assert "views 3, 1, 2" in seen[0][0]                   # worst section first
-    layer.decide(ratios, AREAS, None, views=views)
-    assert len(seen) == 1                                   # same images: from the cache
-    views[3] = (np.random.default_rng(0).integers(0, 255, image.shape, dtype=np.uint8), mask)
-    layer.decide(ratios, AREAS, None, views=views)
-    assert len(seen) == 2                                   # another image: a new request
 
 
 def test_wall_works_follow_the_facade_assessment():

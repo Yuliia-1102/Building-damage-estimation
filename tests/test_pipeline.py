@@ -3,7 +3,7 @@ from PIL import Image
 
 from core.case import case_from_folder
 from core.pipeline import assess
-from models.stub import StubBuildingParams, StubSegmenter
+from tests.doubles import StubBuildingParams, StubSegmenter
 
 
 def test_assess_runs_end_to_end_with_stubs(tmp_path):

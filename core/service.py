@@ -1,11 +1,11 @@
 """Processing entry point for the operator web system (stage 3): uploaded files in, a saved result folder out.
 
     from core.service import get_engine
-    engine = get_engine()                     # real model, or the simulator (DAMAGE_ENGINE=simulator)
+    engine = get_engine()
     summary = engine.process([Path("a.jpg"), Path("b.jpg")], out_dir=Path("data/results/42"), case_id="42")
 
 No Streamlit and no web framework here: a background worker calls process() and keeps the folder path.
-The folder is self-contained (format: docs/web_system.md, section 4):
+The folder is self-contained:
   result.json            the summary for lists and cards, file references and the full report
   report.pdf             the report for download
   views/view<N>.jpg      the view image (for video: the frame the system picked)
@@ -16,8 +16,7 @@ The folder is self-contained (format: docs/web_system.md, section 4):
 reevaluate() re-runs only the cheap part (areas, decision, cost) with building parameters the operator
 corrected, from the saved folder, and rewrites it; segmentation is not repeated.
 
-Language model answers: DAMAGE_LLM_MODE = "offline" (default: cached answers, stubs otherwise, never paid),
-"gemini" (paid requests, needs GEMINI_API_KEY) or "claude" (development bridge, models/claude_bridge.py).
+The language model is Gemini (GEMINI_API_KEY in .env): every assessment and every reevaluation is a new request.
 """
 import copy
 import dataclasses
@@ -80,34 +79,11 @@ def describe_inputs(paths: list[Path]) -> list[dict]:
     return [{"name": p.name, "sha256": file_sha256(p), "bytes": p.stat().st_size} for p in paths]
 
 
-# ---------- the real engine ----------
-
-class RecordedDecision:
-    """Keeps the recorded categories and chosen works; quantities follow the corrected areas (re-evaluation)."""
-
-    def __init__(self, decision):
-        self.recorded = decision
-
-    def decide(self, ratios, areas, building, views=None):
-        from core.decision import apply_category_rules, match_roof_type, works_with_quantities
-        d = self.recorded
-        if d is None:
-            return None
-        d.facade = apply_category_rules(d.damage_category, d.facade)
-        codes = match_roof_type([w.work_type for w in d.works], building and building.roof_type)
-        d.works = works_with_quantities(codes, areas, d.facade, building, facade_damaged=bool(ratios.damaged_facade))
-        return d
-
-
-def _delay() -> tuple[float, float]:
-    raw = os.environ.get("DAMAGE_SIM_DELAY", "3-8")
-    lo, _, hi = raw.partition("-")
-    return float(lo), float(hi or lo)
-
+# ---------- the engine ----------
 
 class ProcessingError(RuntimeError):
-    """Production mode: a step the result cannot do without failed (the language model did not answer).
-    The application goes to Failed with this Ukrainian message, and the operator can retry it."""
+    """A step the result cannot do without failed (the language model did not answer). The application goes
+    to Failed with this Ukrainian message, and the operator can retry it."""
 
     def __init__(self, user_message: str):
         super().__init__(user_message)
@@ -117,66 +93,31 @@ class ProcessingError(RuntimeError):
 class Engine:
     """Loads the models once (a worker keeps one Engine for its lifetime); process() is then 10-60 s per view.
 
-    llm="production" is the working product: every assessment is a new Gemini request (no answer cache, no
-    stub answers, no development data), the segmentation weights are required, and a failed request fails
-    the application instead of producing a partial result. cache_root keeps its mask cache apart."""
+    Every assessment is a new Gemini request: building parameters from the photo, then the categories and
+    works. There is no answer cache and no fallback answer: when a request fails, the processing fails and
+    the operator retries it. The segmentation weights are required. Masks are cached in cache_root
+    (DAMAGE_CACHE_DIR, default data_prod/cache): the same file is not segmented twice."""
 
-    name = "real"
+    name = "production"
 
-    def __init__(self, llm: str | None = None, cache_root: Path | None = None):
-        self.llm = llm or os.environ.get("DAMAGE_LLM_MODE", "offline")
-        if self.llm not in ("offline", "gemini", "claude", "production"):
-            raise ValueError(f"DAMAGE_LLM_MODE must be offline, gemini, claude or production, not {self.llm!r}")
-        self.production = self.llm == "production"
-        if self.production:
-            self.name = "production"
-            if os.environ.get("DAMAGE_LLM"):
-                raise RuntimeError("production mode uses Gemini only: unset DAMAGE_LLM")
-        cache_root = cache_root or (Path(os.environ["DAMAGE_CACHE_DIR"]) if os.environ.get("DAMAGE_CACHE_DIR")
-                                    else None)
-        if self.production and cache_root is None:
-            raise RuntimeError("production mode needs its own cache folder (DAMAGE_CACHE_DIR)")
+    def __init__(self, cache_root: Path | None = None):
+        cache_root = Path(cache_root or os.environ.get("DAMAGE_CACHE_DIR") or config.ROOT / "data_prod" / "cache")
         weights = config.path("weights")
-        if self.production and not weights.exists():
-            raise RuntimeError(f"production mode needs the segmentation weights: {weights}")
-        if weights.exists():
-            from core.cache import CachedSegmenter, quick_segmenter
-            from models.dinov2_unet import DinoV2Segmenter
-            self.segmenter = CachedSegmenter(DinoV2Segmenter(), model_id=weights.stem, root=cache_root)
-            self.quick = quick_segmenter(self.segmenter)
-            self.segmentation_source = "model"
-        else:
-            from models.stub import StubSegmenter
-            log.warning("no weights at %s: stub masks", weights)
-            self.segmenter, self.quick, self.segmentation_source = StubSegmenter(), None, "stub"
-        if self.llm == "offline":
-            from models.offline import CachedOrStubBuilding, CachedOrStubDecision
-            self.building, self.decision = CachedOrStubBuilding(), CachedOrStubDecision()
-        elif self.production:
-            from models.gemini_building import GeminiBuildingEstimator
-            from models.gemini_decision import GeminiDecisionLayer
-            self.building = GeminiBuildingEstimator(model=config.get("decision", "building_model"), use_cache=False)
-            self.decision = GeminiDecisionLayer(model=config.get("decision", "model"), use_cache=False)
-        else:
-            if self.llm == "claude":
-                os.environ.setdefault("DAMAGE_LLM", "claude-sonnet-5-5")
-            from models.gemini_building import GeminiBuildingEstimator
-            from models.gemini_decision import GeminiDecisionLayer
-            self.building, self.decision = GeminiBuildingEstimator(), GeminiDecisionLayer()
+        if not weights.exists():
+            raise RuntimeError(f"no segmentation weights: {weights}")
+        from core.cache import CachedSegmenter, quick_segmenter
+        from models.dinov2_unet import DinoV2Segmenter
+        from models.gemini_building import GeminiBuildingEstimator
+        from models.gemini_decision import GeminiDecisionLayer
         from models.price_source import default_price_source
+        self.segmenter = CachedSegmenter(DinoV2Segmenter(), model_id=weights.stem, root=cache_root)
+        self.quick = quick_segmenter(self.segmenter)
+        self.building = GeminiBuildingEstimator()
+        self.decision = GeminiDecisionLayer()
         self.prices = default_price_source()
 
-    def _source(self, layer) -> str:
-        if hasattr(layer, "last_source"):
-            return layer.last_source or ""
-        if self.llm == "claude":
-            return "claude-dev"
-        return "cache" if layer.llm.last_from_cache else "gemini"
-
     def _check(self, report: Report) -> None:
-        """Production: no result without the model's answers. A failed request is not a partial report."""
-        if not self.production:
-            return
+        """No result without the model's answers: a failed request is not a partial report."""
         failed = [e for e in report.errors if e.startswith(("building parameters", "decision layer"))]
         if failed or report.decision is None:
             log.error("production assessment failed: %s", failed or "no decision")
@@ -214,9 +155,7 @@ class Engine:
             report = evaluate(seg, building_estimator=self.building, decision_layer=self.decision,
                               price_source=self.prices)
             self._check(report)
-        sources = {"segmentation": self.segmentation_source,
-                   "building": self._source(self.building) if report.building else "",
-                   "decision": self._source(self.decision) if report.decision else ""}
+        sources = {"segmentation": "model", "building": "gemini", "decision": "gemini"}
         extra = {"video": video_info, "seconds": round(time.time() - started, 1)}
         progress(0.95, "Зберігаємо результат і PDF")
         data = save_result(seg, report, Path(out_dir), describe_inputs(inputs), sources, extra)
@@ -244,14 +183,10 @@ class Engine:
         masks = [seg.masks[f.view_id] for f in seg.frames]
         frame = building.source_frame if building.source_frame is not None else best_frame_for_floors(masks)
         building = recompute(building, masks[frame], set(changes), masks)
-        # Offline the corrected parameters give a prompt that is not cached: keep the model's categories and
-        # chosen works, recompute quantities and cost. With paid requests the model is asked again.
-        layer = RecordedDecision(report.decision) if self.llm == "offline" else self.decision
-        new = evaluate(seg, building=building, decision_layer=layer, price_source=self.prices)
+        # The model is asked again: the categories and works follow the corrected parameters.
+        new = evaluate(seg, building=building, decision_layer=self.decision, price_source=self.prices)
         self._check(new)
-        sources = dict(data["sources"], building="operator",
-                       decision=(data["sources"].get("decision", "") if self.llm == "offline"
-                                 else self._source(self.decision)) if new.decision else "")
+        sources = dict(data["sources"], building="operator", decision="gemini")
         extra = {"video": data.get("video"), "seconds": data.get("seconds"),
                  "revision": data.get("revision", 1) + 1, "created_at": data.get("created_at")}
         return save_result(seg, new, result_dir, data["inputs"], sources, extra)
@@ -326,7 +261,6 @@ def save_result(seg, report: Report, out_dir: Path, inputs: list[dict], sources:
         "created_at": extra.get("created_at") or now,
         "updated_at": now,
         "revision": extra.get("revision", 1),
-        "simulated": False,
         "sources": sources,
         "inputs": inputs,
         "seconds": extra.get("seconds"),
@@ -393,17 +327,8 @@ _engine = None
 
 
 def get_engine():
-    """One engine per process. DAMAGE_ENGINE=simulator (with DAMAGE_PACK=<pack folder>) needs no weights,
-    no key and no torch; DAMAGE_ENGINE=production is the working product (Gemini only, no cache, see Engine);
-    anything else loads the real model with DAMAGE_LLM_MODE (offline by default)."""
+    """One engine per process (the worker, and the web server for reevaluate)."""
     global _engine
     if _engine is None:
-        kind = os.environ.get("DAMAGE_ENGINE", "real")
-        if kind == "simulator":
-            from core.simulator import SimulatedEngine
-            _engine = SimulatedEngine()
-        elif kind == "production":
-            _engine = Engine(llm="production")
-        else:
-            _engine = Engine()
+        _engine = Engine()
     return _engine

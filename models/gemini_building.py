@@ -14,7 +14,7 @@ from PIL import Image
 from pydantic import BaseModel, Field
 
 from core import building as geom
-from core import cache, config
+from core import config
 from core.imageio import building_box
 from core.types import BuildingParams
 from models.gemini_client import GeminiJSON
@@ -66,17 +66,15 @@ def _jpeg(image: np.ndarray, max_side: int = 1024) -> bytes:
 
 
 class GeminiBuildingEstimator:
-    def __init__(self, client=None, model: str | None = None, use_cache: bool = True):
+    def __init__(self, client=None, model: str | None = None):
         from models.gemini_client import llm_model
-        self.llm = GeminiJSON(client=client, model=model or llm_model("building"),
-                              use_cache=use_cache)
+        self.llm = GeminiJSON(client=client, model=model or llm_model("building"))
 
     def ask(self, image: np.ndarray) -> BuildingResponse:
         from google.genai import types
         data = _jpeg(image)
         contents = [types.Part.from_bytes(data=data, mime_type="image/jpeg"), PROMPT]
-        return self.llm.ask(contents, BuildingResponse, SYSTEM_INSTRUCTION, "building",
-                            [PROMPT, cache.text_key(data.hex())])
+        return self.llm.ask(contents, BuildingResponse, SYSTEM_INSTRUCTION, "building")
 
     def estimate(self, images: list[np.ndarray], masks: list[np.ndarray]) -> BuildingParams:
         """Asks about the frame with the most facade; if neither the floors nor a reference object can be

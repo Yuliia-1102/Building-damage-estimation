@@ -1,7 +1,6 @@
 <a class="card" href="/applications/{{ app.id }}">
   <div class="ct">№{{ app.id }} · {{ app.title }}</div>
   <div class="badges">
-    {% if app.simulated %}<span class="badge sim">симуляція</span>{% endif %}
     {% if app.is_duplicate %}<span class="badge dup">дублікат №{{ app.duplicate_of_id }}</span>{% endif %}
     {% if app.has_assessment and app.damage_category %}
       <span class="badge cat-{{ app.damage_category }}">Кат. {{ app.damage_category }}</span>

@@ -1,9 +1,9 @@
 """Paths and limits for the web system, read from the project config (core.config) so nothing is hardcoded twice.
 
-Everything lives under the repository's `data/` folder (already in .gitignore):
-    data/web.db                 the web database (applications, files, projects, status history)
-    data/uploads/<app_id>/      the files the operator uploaded for an application
-    data/results/<app_id>/      the result folder the engine wrote (result.json, report.pdf, views/)
+Everything lives under the repository's `data_prod/` folder (in .gitignore):
+    data_prod/web.db                 the web database (applications, files, projects, status history)
+    data_prod/uploads/<app_id>/      the files the operator uploaded for an application
+    data_prod/results/<app_id>/      the result folder the engine wrote (result.json, report.pdf, views/)
 """
 import os
 from pathlib import Path
@@ -12,7 +12,7 @@ from core import config
 
 ROOT: Path = config.ROOT
 # Tests and alternate deployments can point the whole data folder elsewhere (DAMAGE_WEB_DATA=/tmp/...).
-DATA_DIR: Path = Path(os.environ.get("DAMAGE_WEB_DATA") or (ROOT / "data"))
+DATA_DIR: Path = Path(os.environ.get("DAMAGE_WEB_DATA") or (ROOT / "data_prod"))
 DB_PATH: Path = DATA_DIR / "web.db"
 UPLOADS_DIR: Path = DATA_DIR / "uploads"
 RESULTS_DIR: Path = DATA_DIR / "results"

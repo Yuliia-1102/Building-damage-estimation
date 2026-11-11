@@ -1,58 +1,61 @@
-"""Production mode: Gemini only. Even for a photo whose answer is in the development cache, a request is sent;
-a failed request fails the processing (no stub answers, no partial result). No paid request is made here:
-the Gemini client is replaced by a fake that records the call and fails."""
+"""The engine end to end on a real photo with the real segmentation model and a fake Gemini client:
+no paid request is made here. Every assessment sends requests (there is no answer cache), and a failed
+request fails the processing instead of producing a partial result."""
+import json
+from types import SimpleNamespace
+
 import pytest
 
 from core import config
 from core.service import Engine, ProcessingError
 
-SCHOOL = config.ROOT.parent / "Dataset_CVAT" / "images" / "default" / "photo_2024-05-04_17-13-39.jpg"
-pytestmark = pytest.mark.skipif(not config.path("weights").exists() or not SCHOOL.exists(),
-                                reason="needs the segmentation weights and the dataset photo")
+PHOTO = config.ROOT.parent / "Dataset_CVAT" / "images" / "default" / "photo_2024-05-04_17-13-39.jpg"
+pytestmark = pytest.mark.skipif(not config.path("weights").exists() or not PHOTO.exists(),
+                                reason="needs the segmentation weights and a dataset photo")
+
+BUILDING = json.dumps({"floors": 2, "floors_confidence": 0.9, "structure_type": "brick", "roof_type": "pitched",
+                       "reference_object": "none", "reference_box": None})
+DECISION = json.dumps({"damage_category": "I", "condition_category": 2, "confidence": 0.8,
+                       "facade": {"window_openings_share": 0.2, "destroyed_wall_share": 0.05, "insulated": False},
+                       "work_types": ["window_glazing_replacement"]})
 
 
-class FailingClient:
-    def __init__(self):
-        self.calls = []
-        outer = self
+class FakeGemini:
+    """Answers the building request, then the decision request; fail=True fails every request."""
 
-        class models:
-            @staticmethod
-            def generate_content(**kw):
-                outer.calls.append(kw["model"])
-                raise RuntimeError("no network in tests")
-        self.models = models
+    def __init__(self, fail=False):
+        self.calls, self.fail = [], fail
+        self.models = SimpleNamespace(generate_content=self._generate)
+
+    def _generate(self, model, contents, config):
+        schema = config.response_schema.__name__
+        self.calls.append(schema)
+        if self.fail:
+            raise RuntimeError("no network in tests")
+        return SimpleNamespace(text=BUILDING if schema == "BuildingResponse" else DECISION, usage_metadata=None)
 
 
-@pytest.fixture
-def engine(tmp_path, monkeypatch):
-    client = FailingClient()
+def engine(monkeypatch, tmp_path, client):
     monkeypatch.setattr("models.gemini_client.make_client", lambda: client)
-    monkeypatch.delenv("DAMAGE_LLM", raising=False)
-    e = Engine(llm="production", cache_root=tmp_path / "cache")
-    return e, client
+    return Engine(cache_root=tmp_path / "cache")
 
 
-def test_production_asks_gemini_even_when_the_dev_cache_has_the_answer(engine, tmp_path):
-    e, client = engine
-    assert e.name == "production"
-    assert not e.building.llm.use_cache and not e.decision.llm.use_cache
+def test_assessment_asks_gemini_every_time(monkeypatch, tmp_path):
+    client = FakeGemini()
+    e = engine(monkeypatch, tmp_path, client)
+    data = e.process([PHOTO], tmp_path / "a")
+    assert data["summary"]["damage_category"] == "I" and data["summary"]["cost_low"] > 0
+    assert data["sources"] == {"segmentation": "model", "building": "gemini", "decision": "gemini"}
+    first = len(client.calls)
+    e.process([PHOTO], tmp_path / "b")
+    assert len(client.calls) == 2 * first          # the same photo again: new requests, nothing cached
+    again = e.reevaluate(tmp_path / "a", {"floors": 3})
+    assert client.calls[-1] == "DecisionResponse" and again["revision"] == 2
+
+
+def test_failed_request_fails_the_processing(monkeypatch, tmp_path):
+    client = FakeGemini(fail=True)
     with pytest.raises(ProcessingError) as err:
-        e.process([SCHOOL], tmp_path / "out")
-    assert client.calls, "a request must be sent, the cache must not answer"
-    assert all(m.startswith("gemini") for m in client.calls)
-    assert "Gemini" not in err.value.user_message
+        engine(monkeypatch, tmp_path, client).process([PHOTO], tmp_path / "out")
+    assert client.calls and "Gemini" not in err.value.user_message
     assert not (tmp_path / "out" / "result.json").exists()
-    assert (tmp_path / "cache" / "masks").exists()          # its own mask cache, not the development one
-
-
-def test_production_needs_its_own_cache_folder(monkeypatch):
-    monkeypatch.delenv("DAMAGE_CACHE_DIR", raising=False)
-    with pytest.raises(RuntimeError, match="DAMAGE_CACHE_DIR"):
-        Engine(llm="production")
-
-
-def test_production_refuses_the_claude_bridge(monkeypatch, tmp_path):
-    monkeypatch.setenv("DAMAGE_LLM", "claude-sonnet-5-5")
-    with pytest.raises(RuntimeError, match="Gemini only"):
-        Engine(llm="production", cache_root=tmp_path)

@@ -1,5 +1,5 @@
-"""Fixes after the first manual run: a work without quantity, the page refresh after processing, the
-"simulated" toggles, Ukrainian assumptions, and the prices page."""
+"""A work without quantity, the page refresh after processing, full-size views, Ukrainian report texts, and
+the prices page."""
 import json
 from pathlib import Path
 
@@ -10,7 +10,7 @@ from web import service
 
 
 def test_work_without_quantity_does_not_break_the_page(client, create, pump, db):
-    aid = create("photo_set_download12_2", "дах смужкою")
+    aid = create(["roof_1.jpg", "roof_2.jpg"], "дах смужкою")
     pump()
     with db() as s:
         path = Path(service.get(s, aid).result_dir) / "result.json"
@@ -23,25 +23,16 @@ def test_work_without_quantity_does_not_break_the_page(client, create, pump, db)
 
 
 def test_progress_asks_for_a_full_reload_when_done(client, create, pump):
-    aid = create("download11_3", "x")
+    aid = create("house.jpg", "x")
     assert "HX-Refresh" not in client.get(f"/applications/{aid}/progress").headers
     pump()
     assert client.get(f"/applications/{aid}/progress").headers.get("HX-Refresh") == "true"
 
 
 def test_views_open_in_full_size(client, create, pump):
-    aid = create("download11_3", "x")
+    aid = create("house.jpg", "x")
     pump()
     assert 'target="_blank"' in client.get(f"/applications/{aid}").text
-
-
-def test_simulated_toggle_only_when_simulated_applications_exist(client, create, pump):
-    assert "показувати симульовані" not in client.get("/board").text
-    assert "враховувати симульовані" not in client.get("/statistics").text
-    create("download11_3", "x")
-    pump()
-    assert "показувати симульовані" in client.get("/board").text
-    assert "враховувати симульовані" in client.get("/statistics").text
 
 
 def test_report_texts_are_ukrainian_and_name_no_service():

@@ -33,10 +33,10 @@ def project_page(project_id: int, request: Request):
         project = s.get(Project, project_id)
         if project is None:
             return HTMLResponse("Проєкт не знайдено", status_code=404)
-        apps = service.board_applications(s, {"project_id": project_id, "show_simulated": True})
-        stats = service.statistics(s, project_id=project_id, include_simulated=False)
-        # Cost sums over processed (real) applications with an assessment.
-        processed = [a for a in apps if a.has_assessment and a.cost_total and not a.simulated]
+        apps = service.board_applications(s, {"project_id": project_id})
+        stats = service.statistics(s, project_id=project_id)
+        # Cost sums over processed applications with an assessment.
+        processed = [a for a in apps if a.has_assessment and a.cost_total]
         approved = [a for a in processed if a.status == Status.APPROVED]
         sums = {
             "all_low": sum(a.cost_low or 0 for a in processed),
@@ -45,6 +45,6 @@ def project_page(project_id: int, request: Request):
             "appr_low": sum(a.cost_low or 0 for a in approved),
             "appr_high": sum(a.cost_high or 0 for a in approved),
             "appr_total": sum(a.cost_total or 0 for a in approved),
-            "no_assessment": sum(1 for a in apps if a.has_assessment is False and not a.simulated),
+            "no_assessment": sum(1 for a in apps if a.has_assessment is False),
         }
         return render("project.html", request, project=project, apps=apps, stats=stats, sums=sums)

@@ -28,7 +28,7 @@
     {% for a in apps %}
       <tr>
         <td><a href="/applications/{{ a.id }}">{{ a.id }}</a></td>
-        <td>{{ a.title }}{% if a.simulated %} <span class="badge sim">симуляція</span>{% endif %}</td>
+        <td>{{ a.title }}</td>
         <td>{{ a.status_ua }}</td>
         <td>{% if a.damage_category %}{{ a.damage_category }}{% else %}—{% endif %}</td>
         <td>{% if a.cost_low %}{{ a.cost_low|money }}–{{ a.cost_high|money }}{% else %}—{% endif %}</td>

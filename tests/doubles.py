@@ -1,4 +1,4 @@
-"""Implementations used when the real components are not available: tests, CI, development."""
+"""Test doubles: fixed answers in place of the model, Gemini and the price source. Used by tests only."""
 from pathlib import Path
 
 import numpy as np

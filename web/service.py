@@ -164,8 +164,6 @@ def get(session: Session, app_id: int) -> Application | None:
 def board_applications(session: Session, filters: dict | None = None) -> list[Application]:
     filters = filters or {}
     stmt = select(Application)
-    if not filters.get("show_simulated"):
-        stmt = stmt.where(Application.simulated.is_(False))
     if filters.get("status"):
         stmt = stmt.where(Application.status == filters["status"])
     if filters.get("damage_category"):
@@ -190,21 +188,14 @@ def board_applications(session: Session, filters: dict | None = None) -> list[Ap
     return list(session.scalars(stmt).all())
 
 
-def has_simulated(session: Session) -> bool:
-    """True when any application holds a simulator result; the "simulated" toggles are shown only then."""
-    return session.scalar(select(Application.id).where(Application.simulated.is_(True)).limit(1)) is not None
-
-
 def projects(session: Session) -> list[Project]:
     return list(session.scalars(select(Project).order_by(Project.name)).all())
 
 
 # ---------- statistics (section 8) ----------
 
-def statistics(session: Session, *, project_id: int | None = None, include_simulated: bool = False) -> dict:
+def statistics(session: Session, *, project_id: int | None = None) -> dict:
     stmt = select(Application)
-    if not include_simulated:
-        stmt = stmt.where(Application.simulated.is_(False))
     if project_id is not None:
         stmt = stmt.where(Application.project_id == project_id)
     apps = list(session.scalars(stmt).all())

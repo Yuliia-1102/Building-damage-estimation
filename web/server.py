@@ -1,8 +1,6 @@
 """FastAPI application for the operator web system.
 
-Run (development, simulated engine):
-    DAMAGE_ENGINE=simulator uvicorn web.server:app --reload
-    DAMAGE_ENGINE=simulator python -m web.worker          # in a second terminal
+Run: scripts/run_production.sh (the server and the worker together).
 
 The server renders the board, the application page, projects and statistics. It never processes an
 application itself: it writes rows to the database, and the worker process does the work (web/worker.py).

@@ -13,7 +13,6 @@
 
 <div class="badges" style="margin-bottom:.8rem">
   <span class="badge cond">{{ app.status_ua }}</span>
-  {% if app.simulated %}<span class="badge sim">симуляція</span>{% endif %}
   {% if app.is_duplicate %}<span class="badge dup">можливий дублікат №{{ app.duplicate_of_id }}</span>{% endif %}
   {% if app.revision and app.revision > 1 %}<span class="badge cond">редакція {{ app.revision }}</span>{% endif %}
 </div>
@@ -129,9 +128,7 @@
       </div>
     </div>
   </form>
-  {% if ENGINE_MODE == 'production' %}
   <p class="muted small">Перерахунок заново визначає категорію і роботи: це новий запит до сервісу оцінювання.</p>
-  {% endif %}
   <p class="muted small" style="margin-top:.6rem">
     Клас наслідків: {{ b.consequence_class or '—' }}.
     {% if b.assumptions %}Припущення: {{ b.assumptions|map('assumption_ua')|join('; ') }}.{% endif %}

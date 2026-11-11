@@ -30,9 +30,6 @@ def _parse_filters(request: Request) -> dict:
         "escalation": q.get("escalation") or None,
         "project_id": q.get("project_id") or None,
         "query": q.get("query") or None,
-        # Show simulated by default (in development every result is simulated, so hiding them empties the
-        # board). The toggle only hides them once the operator submits the filter form with it unchecked.
-        "show_simulated": True if not q else q.get("show_simulated") == "1",
     }
     for key in ("cost_min", "cost_max"):
         val = q.get(key)
@@ -55,7 +52,7 @@ def board(request: Request):
         projects = service.projects(s)
         columns = {st: [a for a in apps if a.status == st] for st in Status.BOARD}
         return render("board.html", request, columns=columns, projects=projects, filters=filters,
-                      raw=dict(request.query_params), total=len(apps), has_simulated=service.has_simulated(s))
+                      raw=dict(request.query_params), total=len(apps))
 
 
 # ---------- creating ----------
@@ -223,8 +220,7 @@ def reevaluate(app_id: int,
             from core.service import InputError, get_engine
             try:
                 data = get_engine().reevaluate(Path(app.result_dir), changes)
-                app.apply_summary(data["summary"], data.get("revision", app.revision + 1),
-                                  data.get("simulated", app.simulated))
+                app.apply_summary(data["summary"], data.get("revision", app.revision + 1))
                 app.updated_at = datetime.now()
                 s.add(service.StatusChange(application_id=app.id, from_status=Status.PROCESSED,
                                            to_status=Status.PROCESSED,
