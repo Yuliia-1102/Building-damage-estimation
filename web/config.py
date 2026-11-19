@@ -16,6 +16,8 @@ DATA_DIR: Path = Path(os.environ.get("DAMAGE_WEB_DATA") or (ROOT / "data"))
 DB_PATH: Path = DATA_DIR / "web.db"
 UPLOADS_DIR: Path = DATA_DIR / "uploads"
 RESULTS_DIR: Path = DATA_DIR / "results"
+LOGS_DIR: Path = DATA_DIR / "logs"            # web.log: one line per request and per audit record
+BACKUPS_DIR: Path = DATA_DIR / "backups"      # python -m web.backup create
 
 DB_URL = f"sqlite:///{DB_PATH}"
 
@@ -33,5 +35,5 @@ def max_upload_mb() -> int:
 
 
 def ensure_dirs() -> None:
-    for d in (DATA_DIR, UPLOADS_DIR, RESULTS_DIR):
+    for d in (DATA_DIR, UPLOADS_DIR, RESULTS_DIR, LOGS_DIR):
         d.mkdir(parents=True, exist_ok=True)

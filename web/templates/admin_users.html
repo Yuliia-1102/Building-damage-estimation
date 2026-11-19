@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Користувачі{% endblock %}
+{% block nav_admin %}active{% endblock %}
+{% block content %}
+<h1>Адміністрування</h1>
+<div class="tabs">
+  <a href="/admin/audit">Журнал дій</a>
+  <a href="/admin/users" class="active">Користувачі</a>
+</div>
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+{% if err %}<div class="notice err">{{ err }}</div>{% endif %}
+<div class="panel">
+<table>
+  <thead><tr><th>Логін</th><th>Ім'я</th><th>Роль</th><th>Стан</th><th></th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td>{{ u.username }}</td><td>{{ u.display_name }}</td><td>{{ roles.get(u.role, u.role) }}</td>
+      <td>{{ 'активний' if u.active else 'деактивований' }}</td>
+      <td>{% if u.id != user.id %}
+        <form method="post" action="/admin/users/{{ u.id }}/active" style="display:inline">
+          <input type="hidden" name="active" value="{{ '0' if u.active else '1' }}">
+          <button class="btn btn-sm" type="submit">{{ 'Деактивувати' if u.active else 'Активувати' }}</button>
+        </form>{% endif %}
+        <a class="btn btn-sm" href="/admin/audit?username={{ u.username }}">Дії</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<div class="panel">
+  <h2>Новий користувач</h2>
+  <form method="post" action="/admin/users" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
+    <label>Логін<br><input type="text" name="username" required></label>
+    <label>Ім'я<br><input type="text" name="display_name" required></label>
+    <label>Роль<br><select name="role">{% for code, name in roles.items() %}<option value="{{ code }}">{{ name }}</option>{% endfor %}</select></label>
+    <label>Пароль (від 8 символів)<br><input type="password" name="password" minlength="8" required></label>
+    <button class="btn btn-primary" type="submit">Створити</button>
+  </form>
+</div>
+{% endblock %}

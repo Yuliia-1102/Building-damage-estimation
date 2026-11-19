@@ -23,7 +23,8 @@ class Conflict(Exception):
     """Someone else changed the application first (for example two operators decided at the same time)."""
 
 
-def transition(session: Session, app: Application, to_status: str, comment: str | None = None) -> None:
+def transition(session: Session, app: Application, to_status: str, comment: str | None = None,
+               user=None) -> None:
     """Change an application's status and record it in status_change with the right timestamps.
 
     Raises InvalidTransition when Status.TRANSITIONS does not allow the change."""
@@ -46,10 +47,12 @@ def transition(session: Session, app: Application, to_status: str, comment: str 
         app.decided_at = now
         if comment:
             app.decision_comment = comment
-    session.add(StatusChange(application_id=app.id, from_status=frm, to_status=to_status, comment=comment))
+    session.add(StatusChange(application_id=app.id, from_status=frm, to_status=to_status, comment=comment,
+                             user_id=getattr(user, "id", None)))
 
 
-def decide(session: Session, app_id: int, to_status: str, comment: str | None = None) -> Application:
+def decide(session: Session, app_id: int, to_status: str, comment: str | None = None,
+           user=None) -> Application:
     """Approve or decline a Processed application exactly once, even when two requests arrive together.
 
     The status is changed by one conditional UPDATE (... WHERE status = 'Processed'): the database lets only
@@ -68,7 +71,7 @@ def decide(session: Session, app_id: int, to_status: str, comment: str | None = 
     if result.rowcount != 1:
         raise Conflict(f"application {app_id} is no longer waiting for a decision")
     session.add(StatusChange(application_id=app_id, from_status=Status.PROCESSED, to_status=to_status,
-                             comment=comment))
+                             comment=comment, user_id=getattr(user, "id", None)))
     session.flush()
     app = session.get(Application, app_id)
     session.refresh(app)
@@ -78,13 +81,14 @@ def decide(session: Session, app_id: int, to_status: str, comment: str | None = 
 # ---------- creating applications ----------
 
 def new_application_row(session: Session, *, title: str, comment: str | None, project_id: int | None,
-                        mode: str) -> Application:
+                        mode: str, owner_id: int | None = None) -> Application:
     """Create the application row (so files can be saved under data/uploads/<id>/) and record Created."""
     app = Application(title=(title or "").strip() or "Без назви", comment=(comment or "").strip() or None,
-                      project_id=project_id, mode=mode, status=Status.CREATED)
+                      project_id=project_id, mode=mode, status=Status.CREATED, owner_id=owner_id)
     session.add(app)
     session.flush()   # assign app.id
-    session.add(StatusChange(application_id=app.id, from_status=None, to_status=Status.CREATED))
+    session.add(StatusChange(application_id=app.id, from_status=None, to_status=Status.CREATED,
+                             user_id=owner_id))
     return app
 
 
@@ -106,7 +110,7 @@ def attach_files_and_queue(session: Session, app: Application, saved: list[dict]
     return dup
 
 
-def merge_into(session: Session, app: Application) -> Application | None:
+def merge_into(session: Session, app: Application, user=None) -> Application | None:
     """Merge a duplicate application into the one it duplicates (section 7).
 
     Files of `app` that the target does not already have (by sha256) are copied into the target; the target
@@ -138,10 +142,10 @@ def merge_into(session: Session, app: Application) -> Application | None:
         added += 1
 
     app.merged = True
-    transition(session, app, Status.DECLINED, comment=f"об'єднано із заявкою №{target.id}")
+    transition(session, app, Status.DECLINED, comment=f"об'єднано із заявкою №{target.id}", user=user)
     if added:
         transition(session, target, Status.CREATED,
-                   comment=f"додано {added} файл(и) із заявки №{app.id}, повторна обробка")
+                   comment=f"додано {added} файл(и) із заявки №{app.id}, повторна обробка", user=user)
         target.queued_at = datetime.now()
     session.flush()
     return target
@@ -212,6 +216,8 @@ def board_applications(session: Session, filters: dict | None = None) -> list[Ap
         stmt = stmt.where(Application.condition_category == int(filters["condition_category"]))
     if filters.get("escalation"):
         stmt = stmt.where(Application.escalation == filters["escalation"])
+    if filters.get("owner_id"):
+        stmt = stmt.where(Application.owner_id == int(filters["owner_id"]))
     if filters.get("project_id"):
         stmt = stmt.where(Application.project_id == int(filters["project_id"]))
     if filters.get("cost_min") is not None:

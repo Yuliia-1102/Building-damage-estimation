@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Журнал дій{% endblock %}
+{% block nav_admin %}active{% endblock %}
+{% block content %}
+<h1>Адміністрування</h1>
+<div class="tabs">
+  <a href="/admin/audit" class="active">Журнал дій</a>
+  <a href="/admin/users">Користувачі</a>
+</div>
+<form class="filters" method="get" action="/admin/audit">
+  <select name="username"><option value="">усі користувачі</option>
+    {% for u in usernames %}<option value="{{ u }}" {% if raw.get('username') == u %}selected{% endif %}>{{ u }}</option>{% endfor %}
+  </select>
+  <select name="action"><option value="">усі дії</option>
+    {% for code, name in actions.items() %}<option value="{{ code }}" {% if raw.get('action') == code %}selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+  <select name="result"><option value="">будь-який результат</option>
+    {% for code, name in results.items() %}<option value="{{ code }}" {% if raw.get('result') == code %}selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+  <select name="object_type"><option value="">усі об'єкти</option>
+    {% for t, name in [('application','заявка'),('project','проєкт'),('price','ціна'),('user','користувач'),('admin','адміністрування')] %}
+    <option value="{{ t }}" {% if raw.get('object_type') == t %}selected{% endif %}>{{ name }}</option>{% endfor %}
+  </select>
+  <input type="text" name="object_id" value="{{ raw.get('object_id','') }}" placeholder="№ об'єкта" size="8">
+  <input type="date" name="date_from" value="{{ raw.get('date_from','') }}">
+  <input type="date" name="date_to" value="{{ raw.get('date_to','') }}">
+  <button class="btn" type="submit">Показати</button>
+</form>
+<p class="muted small">Записів: {{ events|length }} (останні 500). Записи журналу не можна змінити чи видалити.</p>
+<div class="table-scroll">
+<table>
+  <thead><tr><th>Час</th><th>Користувач</th><th>Дія</th><th>Об'єкт</th><th>Результат</th><th>Деталі</th><th>Запит</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+    <tr>
+      <td class="small">{{ e.at.strftime('%d.%m.%Y %H:%M:%S') }}</td>
+      <td>{{ e.username }}</td>
+      <td>{{ actions.get(e.action, e.action) }}</td>
+      <td>{% if e.object_type == 'application' and e.object_id %}<a href="/applications/{{ e.object_id }}">заявка №{{ e.object_id }}</a>
+          {% elif e.object_type == 'project' and e.object_id %}<a href="/projects/{{ e.object_id }}">проєкт №{{ e.object_id }}</a>
+          {% else %}{{ e.object_type or '' }} {{ e.object_id or '' }}{% endif %}</td>
+      <td><span class="badge {{ 'cat-I' if e.result == 'ok' else 'cat-III' }}">{{ results.get(e.result, e.result) }}</span></td>
+      <td class="small muted">{{ e.details or '' }}</td>
+      <td class="small muted">{{ e.request_id or '' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

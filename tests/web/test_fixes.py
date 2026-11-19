@@ -64,7 +64,8 @@ def prices(tmp_path, monkeypatch):
     return sessions
 
 
-def test_prices_page_saves_a_price_and_keeps_history(client, prices):
+def test_prices_page_saves_a_price_and_keeps_history(admin_client, prices):
+    client = admin_client
     from pricedb import list_materials_with_price, price_history
     r = client.get("/materials")
     assert r.status_code == 200 and "Поточні ціни матеріалів" in r.text
@@ -81,14 +82,16 @@ def test_prices_page_saves_a_price_and_keeps_history(client, prices):
     assert "Ціна має бути числом" in r.text
 
 
-def test_prices_page_adds_a_material(client, prices):
+def test_prices_page_adds_a_material(admin_client, prices):
+    client = admin_client
     r = client.post("/materials/new", data={"name": "Тестовий матеріал", "unit": "kg", "value": "12"})
     assert "Матеріал «Тестовий матеріал» додано" in r.text and "<td>Тестовий матеріал</td>" in r.text
     r = client.post("/materials/new", data={"name": "Тестовий матеріал", "unit": "kg"})
     assert "уже є" in r.text
 
 
-def test_labour_rate_is_saved(client, prices):
+def test_labour_rate_is_saved(admin_client, prices):
+    client = admin_client
     from pricedb import labour_history, list_labour_rates
     with prices() as s:
         code = list_labour_rates(s)[0].code

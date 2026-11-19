@@ -36,10 +36,11 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
 
 def init_db() -> None:
-    """Create the database file and all tables if they do not exist. Safe to call on every startup."""
+    """Create the database, or bring an older one to the current schema (web/migrate.py). Safe on every start."""
     config.ensure_dirs()
     from web import models  # noqa: F401  (registers the tables on Base)
-    Base.metadata.create_all(engine)
+    from web.migrate import migrate
+    migrate(engine)
 
 
 @contextmanager

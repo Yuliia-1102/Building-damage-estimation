@@ -61,6 +61,11 @@
     <label>до</label>
     <input type="date" name="date_to" value="{{ raw.get('date_to','') }}">
   </div>
+  <div class="f check" style="max-width:130px">
+    <input type="checkbox" id="mine" name="mine" value="1" {% if filters.mine %}checked{% endif %}
+           onchange="this.form.submit()">
+    <label for="mine" style="margin:0">лише мої</label>
+  </div>
   {% if has_simulated %}
   <div class="f check" style="max-width:170px">
     <input type="checkbox" id="sim" name="show_simulated" value="1" {% if filters.show_simulated %}checked{% endif %}
