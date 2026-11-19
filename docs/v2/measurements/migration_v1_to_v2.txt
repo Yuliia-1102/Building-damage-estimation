@@ -1,0 +1,84 @@
+# Migration of the v1.0 training data set (made with the v1.0 code, tag v1.0) to v2.0
+# commit c48dbdc, 2026-11-20 01:16
+
+$ python -m web.migrate --check   (before)
+{
+  "tables": [
+    "application",
+    "application_file",
+    "project",
+    "status_change"
+  ],
+  "application": 7,
+  "application_file": 11,
+  "status_change": 22,
+  "project": 1,
+  "app_user": null,
+  "audit_event": null,
+  "by_status": {
+    "Approved": 2,
+    "Created": 1,
+    "Declined": 1,
+    "Failed": 1,
+    "Processed": 2
+  },
+  "without_owner": 7,
+  "version": 1
+}
+
+$ python -m web.migrate
+{
+  "before": {
+    "tables": [
+      "application",
+      "application_file",
+      "project",
+      "status_change"
+    ],
+    "application": 7,
+    "application_file": 11,
+    "status_change": 22,
+    "project": 1,
+    "app_user": null,
+    "audit_event": null,
+    "by_status": {
+      "Approved": 2,
+      "Created": 1,
+      "Declined": 1,
+      "Failed": 1,
+      "Processed": 2
+    },
+    "without_owner": 7,
+    "version": 1
+  },
+  "after": {
+    "tables": [
+      "app_user",
+      "application",
+      "application_file",
+      "audit_event",
+      "project",
+      "schema_version",
+      "status_change"
+    ],
+    "application": 7,
+    "application_file": 11,
+    "status_change": 22,
+    "project": 1,
+    "app_user": 4,
+    "audit_event": 0,
+    "by_status": {
+      "Approved": 2,
+      "Created": 1,
+      "Declined": 1,
+      "Failed": 1,
+      "Processed": 2
+    },
+    "without_owner": 0,
+    "version": 2
+  }
+}
+OK: rows kept, statuses kept, every application has an owner, schema version 2
+
+$ python -m web.migrate   (second run: nothing changes)
+OK: rows kept, statuses kept, every application has an owner, schema version 2
