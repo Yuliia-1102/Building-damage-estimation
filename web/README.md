@@ -3,19 +3,27 @@
 Вебчастина етапу 3: оператор створює заявки, фоновий обробник оцінює їх через `core.service`, а дошка,
 сторінка заявки, проєкти і статистика показують результат. Повне завдання — `docs/web_system.md`.
 
-Вебкод не змінює оцінювання: `core/`, `models/`, `pricedb/`, `config.toml` лишаються як є. Увесь новий код —
-у цій теці `web/`, тести — у `tests/web/`, залежності — окрема група `web` у `pyproject.toml`.
+Вебкод не змінює оцінювання: `core/`, `models/`, `pricedb/`, `config.toml` лишаються як є. Увесь вебкод —
+у цій теці `web/`, тести — у `tests/web/`.
 
-## Установлення
+## Установлення (чисте середовище)
 
-1. Залежності вебчастини:
+Потрібні: git, [uv](https://docs.astral.sh/uv/) 0.9 або новіший, Python 3.12 (uv встановить сам). Ваги моделі
+й ключі API для вебсистеми з симулятором не потрібні.
 
-   ```bash
-   uv sync --extra web            # або: pip install "fastapi" "uvicorn" "jinja2" "python-multipart"
-   ```
+```bash
+git clone https://github.com/Yuliia-1102/Building-damage-estimation.git
+cd Building-damage-estimation
+git checkout v2.0                    # або main
+uv sync --frozen                     # залежності точно за uv.lock (без torch: він лише в extra "ml")
+```
 
-2. Набір тестових кейсів (для симулятора): розпакувати `devpack.zip` у корінь репозиторію, щоб вийшло
-   `devpack/index.json`. Теку в git не додавати (вона в `.gitignore`).
+Набір записаних кейсів для симулятора (`devpack`, 94 МБ) лежить у релізі v1.0:
+
+```bash
+curl -L -o devpack.zip https://github.com/Yuliia-1102/Building-damage-estimation/releases/download/v1.0/devpack.zip
+unzip -q devpack.zip && rm devpack.zip          # має з'явитися devpack/index.json
+```
 
 ## Запуск (розробка, без ваг моделі й без ключів)
 
@@ -23,17 +31,72 @@
 
 ```bash
 # 1) вебсервер
-DAMAGE_ENGINE=simulator uvicorn web.server:app --reload --port 8000
+DAMAGE_ENGINE=simulator uv run uvicorn web.server:app --port 8000
 
 # 2) фоновий обробник
-DAMAGE_ENGINE=simulator python -m web.worker
+DAMAGE_ENGINE=simulator uv run python -m web.worker
 ```
 
-Відкрити http://localhost:8000 . База (`data/web.db`), теки завантажень (`data/uploads/`) і результатів
-(`data/results/`) створюються автоматично на першому запуску.
+Відкрити http://localhost:8000 і увійти. **Навчальні облікові записи** (створюються на першому запуску):
 
-Сервер і обробник спілкуються лише через базу: можна закрити вкладку, перезапустити сервер чи обробник —
-обробка все одно завершиться, а застряглі в `Processing` заявки після перезапуску обробника повертаються в чергу.
+| Логін | Роль | Пароль |
+|---|---|---|
+| `admin` | адміністратор: усі заявки, ціни, користувачі, журнал дій | `demo2026` |
+| `operator1`, `operator2` | оператор: свої заявки | `demo2026` |
+
+Пароль навчальний; для іншого задайте `DAMAGE_DEMO_PASSWORD` до першого запуску. Ключ підпису сесій береться з
+`DAMAGE_WEB_SECRET` або генерується в `data/secret.key` (у git не потрапляє).
+
+База (`data/web.db`), теки завантажень (`data/uploads/`), результатів (`data/results/`) і журнал
+(`data/logs/web.log`) створюються автоматично. Сервер і обробник спілкуються лише через базу: можна закрити
+вкладку, перезапустити сервер чи обробник — обробка все одно завершиться.
+
+Перевірка стану: http://localhost:8000/healthz → `{"ok": true}`.
+
+## Версія 2.0: ролі, адміністрування, журнал дій
+
+- Кожна заявка має власника. Затвердити, відхилити, повторити, перерахувати, додати до проєкту може лише власник
+  або адміністратор; інший оператор отримує відмову (HTTP 403), і відмова теж записується в журнал.
+- Ціни матеріалів і розцінки змінює лише адміністратор.
+- **Журнал дій** (Адміністрування → Журнал дій): хто, що, з яким об'єктом, коли і з яким результатом — вхід,
+  завантаження файлів, створення заявки і проєкту, рішення, зміни цін, керування користувачами, обробка.
+- Кожен запит має ідентифікатор (`X-Request-ID`); той самий ідентифікатор є в `data/logs/web.log` і в журналі
+  дій, тож невдалу операцію можна простежити від рядка логу до заявки.
+
+### Міграція даних v1.0 → v2.0
+
+Відбувається автоматично на старті сервера чи обробника. Вручну, з перевіркою до і після:
+
+```bash
+uv run python -m web.backup create        # спершу резервна копія
+uv run python -m web.migrate              # таблиці користувачів і журналу, власник "legacy" для старих заявок
+uv run python -m web.migrate --check      # лише звіт: кількість заявок, файлів, історії, статуси, версія схеми
+```
+
+Відкат: код v1.0 запускається на перенесеній базі (нові таблиці й стовпці він ігнорує), але створені ним заявки
+не матимуть власника, а дії не потраплять у журнал. Повний відкат — лише відновленням копії, зробленої перед
+міграцією.
+
+### Резервна копія і відновлення
+
+```bash
+uv run python -m web.backup create                       # data/backups/backup-<дата>.zip
+uv run python -m web.backup restore data/backups/backup-<дата>.zip
+uv run python -m web.backup verify  data/backups/backup-<дата>.zip
+```
+
+Перед `restore` зупиніть сервер і обробник. Після відновлення команда сама порівнює кількість заявок, файлів,
+історії й користувачів з копією і перевіряє, що кожен файл на місці; очікуваний вивід закінчується рядком
+`OK: the same applications, files, history and users as in the backup; every file exists`.
+
+### Звіт про роботу і поріг сповіщення
+
+```bash
+uv run python -m tools.ops_report --since "2026-11-20 10:00"
+```
+
+Показує по хвилинах кількість успішних, відхилених (4xx) і невдалих (5xx) запитів та p95 тривалості. Хвилина
+позначається `ALERT`, якщо в ній ≥ 3 невдалих запитів, > 20 % невдалих або `/healthz` відповів 503.
 
 ## Справжня модель (інтеграція)
 
@@ -74,7 +137,7 @@ DAMAGE_ENGINE=real python -m web.worker
 ## Тести
 
 ```bash
-python -m pytest tests/web -q
+uv run pytest tests/web -q      # потрібен devpack (див. вище)
 ```
 
 Тести ганяють сценарії вище на симуляторі в тимчасовій базі (`DAMAGE_WEB_DATA`), ваги моделі не потрібні.
@@ -91,7 +154,12 @@ web/
   worker.py        фоновий обробник: python -m web.worker (єдине місце, де працює рушій)
   server.py        FastAPI: монтування статики, підключення маршрутів
   templating.py    Jinja2 + українські довідники й фільтри
-  routes/          applications, projects, statistics
-  templates/       board, new, application, project(s), statistics, partials
+  auth.py          (v2.0) паролі, сесія, права, навчальні облікові записи
+  audit.py         (v2.0) журнал дій: запис і пошук
+  migrate.py       (v2.0) міграція бази v1.0 -> v2.0: python -m web.migrate
+  backup.py        (v2.0) резервна копія і відновлення: python -m web.backup
+  logsetup.py      (v2.0) файл журналу data/logs/web.log
+  routes/          applications, projects, statistics, materials, auth (вхід), admin (користувачі, журнал)
+  templates/       board, new, application, project(s), statistics, login, admin_*, partials
   static/app.css
 ```
