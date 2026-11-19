@@ -162,22 +162,40 @@ def retry(app_id: int):
     return RedirectResponse(f"/applications/{app_id}", status_code=303)
 
 
+def error_page(status_code: int, text: str, back: str = "/board") -> HTMLResponse:
+    """A short error page. 400 validation, 403 no permission, 404 not found, 409 conflict - never 500."""
+    return HTMLResponse(f'<p>{text}</p><p><a href="{back}">Назад</a></p>', status_code=status_code)
+
+
 @router.post("/applications/{app_id}/approve")
 def approve(app_id: int):
     with session_scope() as s:
         app = service.get(s, app_id)
-        if app and app.can_decide and app.has_assessment:
-            service.transition(s, app, Status.APPROVED, comment="затверджено оператором")
+        if app is None:
+            return error_page(404, "Заявку не знайдено.")
+        if not app.has_assessment:
+            return error_page(400, "Без оцінки заявку не можна затвердити.", f"/applications/{app_id}")
+        try:
+            service.decide(s, app_id, Status.APPROVED, comment="затверджено оператором")
+        except service.Conflict:
+            return error_page(409, "Заявка вже не очікує рішення: її змінив хтось інший.",
+                              f"/applications/{app_id}")
     return RedirectResponse(f"/applications/{app_id}", status_code=303)
 
 
 @router.post("/applications/{app_id}/decline")
 def decline(app_id: int, reason: str = Form(...)):
     reason = (reason or "").strip()
+    if not reason:
+        return error_page(400, "Вкажіть причину відхилення.", f"/applications/{app_id}")
     with session_scope() as s:
-        app = service.get(s, app_id)
-        if app and app.can_decide and reason:
-            service.transition(s, app, Status.DECLINED, comment=reason)
+        if service.get(s, app_id) is None:
+            return error_page(404, "Заявку не знайдено.")
+        try:
+            service.decide(s, app_id, Status.DECLINED, comment=reason)
+        except service.Conflict:
+            return error_page(409, "Заявка вже не очікує рішення: її змінив хтось інший.",
+                              f"/applications/{app_id}")
     return RedirectResponse(f"/applications/{app_id}", status_code=303)
 
 
