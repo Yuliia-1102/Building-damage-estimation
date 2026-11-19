@@ -4,9 +4,7 @@ same prompts. Paid: about 5 requests the first time, none after (each line says 
     uv run python -m tools.demo_warmup
 """
 import copy
-import glob
 import logging
-from pathlib import Path
 
 from core import config
 from core.cache import CachedSegmenter, quick_segmenter

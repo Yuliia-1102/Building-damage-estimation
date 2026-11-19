@@ -31,10 +31,29 @@ ml = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.17.6",
+]
 
 [tool.uv]
 package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["devpack", "data", "data_prod", "output", "cache", "weights"]
+
+[tool.ruff.lint]
+# Errors that break code (F: pyflakes, E9: syntax), style basics (E, W) and likely bugs (B).
+select = ["F", "E", "W", "B"]
+ignore = [
+    "E501",  # long lines: reports and prompts keep long strings; 120 is the convention
+    "E731",  # small lambdas assigned to names are fine here
+    "E741",  # short names like l (length) in geometry code
+    "B008",  # FastAPI declares form fields as Form(...) defaults by design
+    "B905",  # zip() over lists of equal length built together
+]
