@@ -7,16 +7,22 @@ Run (development, simulated engine):
 The server renders the board, the application page, projects and statistics. It never processes an
 application itself: it writes rows to the database, and the worker process does the work (web/worker.py).
 """
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from sqlalchemy import func, select, text
 
 from web import config
-from web.db import init_db
+from web.db import init_db, session_scope
+from web.models import Application, Status
 
 HERE = Path(__file__).resolve().parent
+
+# An application waiting in the queue longer than this means the worker is not running.
+STUCK_QUEUE_MINUTES = 5
 
 
 def create_app() -> FastAPI:
@@ -43,7 +49,17 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():
-        return {"ok": True}
+        """200 if the system works; 503 if the database is unreachable or the queue does not move."""
+        try:
+            with session_scope() as s:
+                s.execute(text("SELECT 1"))
+                limit = datetime.now() - timedelta(minutes=STUCK_QUEUE_MINUTES)
+                stuck = s.scalar(select(func.count()).select_from(Application).where(
+                    Application.status == Status.CREATED, Application.queued_at < limit))
+        except Exception as e:
+            return JSONResponse({"ok": False, "db": "error", "detail": str(e)[:200]}, status_code=503)
+        ok = stuck == 0
+        return JSONResponse({"ok": ok, "db": "ok", "stuck_in_queue": stuck}, status_code=200 if ok else 503)
 
     return app
 
