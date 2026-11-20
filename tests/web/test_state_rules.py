@@ -104,3 +104,10 @@ def test_validation_and_not_found_differ_from_failure(client, create, pump, db):
     aid = _processed(create, pump, db)
     assert client.post(f"/applications/{aid}/decline", data={"reason": " "}).status_code == 400
     assert client.post("/applications/99999/approve").status_code == 404
+
+
+def test_error_page_escapes_text():
+    from web.routes.applications import error_page
+    body = error_page(400, "<script>alert(1)</script>", back='/x"><b>').body.decode()
+    assert "<script>" not in body and "&lt;script&gt;" in body
+    assert '"><b>' not in body
