@@ -61,3 +61,27 @@ def test_legacy_owner_cannot_sign_in(tmp_path):
     with Session(engine) as s:
         assert authenticate(s, "legacy", "") is None
         assert authenticate(s, "admin", "demo2026") is not None
+
+
+def test_two_processes_migrating_at_once(tmp_path):
+    """The server and the worker start together on a v1.0 database: both must come up (review on PR #5)."""
+    import threading
+
+    from web.migrate import migrate, report
+    db = _v1_db(tmp_path)
+    errors = []
+
+    def start():
+        try:
+            migrate(create_engine(f"sqlite:///{db}"))
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=start) for _ in range(2)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert errors == []
+    after = report(create_engine(f"sqlite:///{db}"))
+    assert after["version"] == 2 and after["without_owner"] == 0 and after["app_user"] == 4
