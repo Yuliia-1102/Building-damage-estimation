@@ -122,5 +122,6 @@ env.globals.update(
 
 def render(template: str, request: Request, **ctx) -> HTMLResponse:
     ctx.setdefault("request", request)
+    ctx.setdefault("user", getattr(request.state, "user", None))
     html = env.get_template(template).render(**ctx)
     return HTMLResponse(html)

@@ -1,0 +1,13 @@
+{
+  "requirement": "QR-3: board with 1000 applications, p95 of 100 sequential GET /board after 10 warm-up",
+  "threshold_ms": 1000,
+  "p50_ms": 88.0,
+  "p95_ms": 133.5,
+  "max_ms": 136.8,
+  "passed": true,
+  "applications": 1000,
+  "machine": "Darwin x86_64, Python 3.12.14",
+  "commit": "08951b3",
+  "measured_at": "2026-11-20T01:15:04",
+  "tool": "tools/measure_board.py (FastAPI TestClient, SQLite)"
+}

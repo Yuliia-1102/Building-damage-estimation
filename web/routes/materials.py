@@ -8,16 +8,34 @@ from functools import lru_cache
 from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 
 from core import config
 from core.reference import WORK_NAMES_UA
 from pricedb import (Material, add_material, labour_history, list_labour_rates, list_materials_with_price,
                      open_db, price_history, update_labour_rate, update_price)
+from web import audit
+from web.db import session_scope
 from web.templating import render
 
 router = APIRouter()
+
+
+def _admin_only(request: Request, action: str, object_id) -> HTMLResponse | None:
+    """Prices change every later estimate, so only an administrator may change them (v2.0)."""
+    user = request.state.user
+    if user.is_admin:
+        return None
+    with session_scope() as s:
+        audit.record(s, user, action, "price", object_id, result="denied", details="not an administrator")
+    return HTMLResponse('<p>Змінювати ціни може лише адміністратор.</p><p><a href="/materials">Назад</a></p>',
+                        status_code=403)
+
+
+def _audit(request: Request, action: str, object_id, details: str) -> None:
+    with session_scope() as s:
+        audit.record(s, request.state.user, action, "price", object_id, details=details)
 
 UNIT_NAMES = {"kg": "кг", "l": "л", "m2": "м²", "m3": "м³", "m": "м", "pcs": "шт."}
 
@@ -31,13 +49,13 @@ def _parse(value: str, valid_from: str) -> tuple[float, date]:
     try:
         number = float(value.replace(",", ".").replace(" ", ""))
     except ValueError:
-        raise ValueError("Ціна має бути числом.")
+        raise ValueError("Ціна має бути числом.") from None
     if number < 0:
         raise ValueError("Ціна не може бути від'ємною.")
     try:
         day = date.fromisoformat(valid_from) if valid_from else date.today()
     except ValueError:
-        raise ValueError("Неправильна дата.")
+        raise ValueError("Неправильна дата.") from None
     return number, day
 
 
@@ -69,22 +87,28 @@ def materials_page(request: Request):
 
 
 @router.post("/materials/price")
-def save_price(material_id: int = Form(...), value: str = Form(...), valid_from: str = Form(""),
-               source: str = Form("")):
+def save_price(request: Request, material_id: int = Form(...), value: str = Form(...),
+               valid_from: str = Form(""), source: str = Form("")):
+    if (denied := _admin_only(request, "price_changed", f"material:{material_id}")):
+        return denied
     try:
         number, day = _parse(value, valid_from)
         with _sessions()() as s:
             saved = update_price(s, material_id, number, day, source.strip() or "оператор")
     except ValueError as e:
         return _back("materials", err=str(e), material=material_id)
+    if saved is not None:
+        _audit(request, "price_changed", f"material:{material_id}", f"{number} from {day.isoformat()}")
     msg = ("Ціна та сама, новий запис не потрібен." if saved is None
            else "Ціну збережено, попереднє значення лишилось в історії.")
     return _back("materials", msg=msg, material=material_id)
 
 
 @router.post("/materials/new")
-def new_material(name: str = Form(...), unit: str = Form(...), value: str = Form(""),
+def new_material(request: Request, name: str = Form(...), unit: str = Form(...), value: str = Form(""),
                  source: str = Form("")):
+    if (denied := _admin_only(request, "material_added", None)):
+        return denied
     if unit not in UNIT_NAMES:
         return _back("materials", err="Невідома одиниця виміру.")
     try:
@@ -100,18 +124,23 @@ def new_material(name: str = Form(...), unit: str = Form(...), value: str = Form
             material_id = material.id
     except ValueError as e:
         return _back("materials", err=str(e))
+    _audit(request, "material_added", f"material:{material_id}", f"{name.strip()} ({unit})")
     return _back("materials", msg=f"Матеріал «{name.strip()}» додано.", material=material_id)
 
 
 @router.post("/materials/labour")
-def save_labour(work_code: str = Form(...), value: str = Form(...), valid_from: str = Form(""),
-                source: str = Form("")):
+def save_labour(request: Request, work_code: str = Form(...), value: str = Form(...),
+                valid_from: str = Form(""), source: str = Form("")):
+    if (denied := _admin_only(request, "labour_rate_changed", f"work:{work_code}")):
+        return denied
     try:
         number, day = _parse(value, valid_from)
         with _sessions()() as s:
             saved = update_labour_rate(s, work_code, number, day, source.strip() or "оператор")
     except ValueError as e:
         return _back("labour", err=str(e), work=work_code)
+    if saved is not None:
+        _audit(request, "labour_rate_changed", f"work:{work_code}", f"{number} from {day.isoformat()}")
     msg = ("Розцінка та сама, новий запис не потрібен." if saved is None
            else "Розцінку збережено, попереднє значення лишилось в історії.")
     return _back("labour", msg=msg, work=work_code)

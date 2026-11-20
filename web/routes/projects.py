@@ -2,9 +2,9 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from web import service
+from web import audit, service
 from web.db import session_scope
-from web.models import Application, Project, Status
+from web.models import Project, Status
 from web.templating import render
 
 router = APIRouter()
@@ -19,11 +19,15 @@ def projects_list(request: Request):
 
 
 @router.post("/projects")
-def create_project(name: str = Form(...), description: str = Form("")):
+def create_project(request: Request, name: str = Form(...), description: str = Form("")):
     name = (name or "").strip()
+    user = request.state.user
     with session_scope() as s:
         if name:
-            s.add(Project(name=name, description=(description or "").strip() or None))
+            project = Project(name=name, description=(description or "").strip() or None, created_by_id=user.id)
+            s.add(project)
+            s.flush()
+            audit.record(s, user, "project_created", "project", project.id, details=name)
     return RedirectResponse("/projects", status_code=303)
 
 

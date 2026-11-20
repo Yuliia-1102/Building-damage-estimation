@@ -13,6 +13,7 @@ os.environ["DAMAGE_WEB_DATA"] = _TMP
 os.environ["DAMAGE_ENGINE"] = "simulator"
 os.environ["DAMAGE_SIM_DELAY"] = "0"
 os.environ.setdefault("DAMAGE_SIM_FAIL_RATE", "0")
+os.environ.pop("DAMAGE_DEMO_PASSWORD", None)   # tests sign in with the default training password
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -38,8 +39,27 @@ def client():
     for d in (config.UPLOADS_DIR, config.RESULTS_DIR):
         shutil.rmtree(d, ignore_errors=True)
     init_db()
+    return login_as("operator1")
+
+
+def login_as(username: str, password: str = "demo2026") -> TestClient:
+    """A separate browser session signed in as one of the prepared accounts (web/auth.py DEMO_USERS)."""
     from web.server import app
-    return TestClient(app)
+    c = TestClient(app)
+    r = c.post("/login", data={"username": username, "password": password}, follow_redirects=False)
+    assert r.status_code == 303, r.text
+    return c
+
+
+@pytest.fixture
+def admin_client(client):
+    return login_as("admin")
+
+
+@pytest.fixture
+def other_client(client):
+    """Another ordinary operator: must not be able to change operator1's applications."""
+    return login_as("operator2")
 
 
 @pytest.fixture

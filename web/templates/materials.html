@@ -40,6 +40,7 @@
 <div class="row" id="edit">
   <div class="panel">
     <h2>Нова ціна матеріалу</h2>
+{% if user and user.is_admin %}
     <form method="post" action="/materials/price">
       <label>Матеріал</label>
       <select name="material_id" onchange="location='/materials?tab=materials&material='+this.value+'#edit'">
@@ -55,6 +56,7 @@
       <input type="text" name="source" placeholder="наприклад, прайс постачальника">
       <button class="btn btn-primary" style="margin-top:.8rem">Зберегти ціну</button>
     </form>
+{% else %}<p class="muted small">Змінювати ціни може лише адміністратор.</p>{% endif %}
     <h3 style="margin-top:1.2rem">Історія цін</h3>
     <table>
       <thead><tr><th>Діє з</th><th>Ціна, грн</th><th>Джерело</th></tr></thead>
@@ -70,6 +72,7 @@
 
   <div class="panel">
     <h2>Новий матеріал</h2>
+{% if user and user.is_admin %}
     <form method="post" action="/materials/new">
       <label>Назва</label>
       <input type="text" name="name" required>
@@ -83,6 +86,7 @@
       <input type="text" name="source">
       <button class="btn btn-primary" style="margin-top:.8rem">Додати</button>
     </form>
+{% else %}<p class="muted small">Змінювати ціни може лише адміністратор.</p>{% endif %}
     <p class="muted small" style="margin-top:.8rem">Новий матеріал з'явиться в оцінці, коли його пов'яжуть із видом робіт
       (норма витрати на одиницю роботи). Це робиться в базі розробником.</p>
   </div>
@@ -110,6 +114,7 @@
 
 <div class="panel" id="edit">
   <h2>Нова розцінка</h2>
+{% if user and user.is_admin %}
   <form method="post" action="/materials/labour">
     <div class="row">
       <div><label>Робота</label>
@@ -124,6 +129,7 @@
     </div>
     <button class="btn btn-primary" style="margin-top:.8rem">Зберегти розцінку</button>
   </form>
+{% else %}<p class="muted small">Змінювати ціни може лише адміністратор.</p>{% endif %}
   <h3 style="margin-top:1.2rem">Історія розцінок</h3>
   <table>
     <thead><tr><th>Діє з</th><th>Ціна, грн</th><th>Джерело</th></tr></thead>

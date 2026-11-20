@@ -207,8 +207,11 @@
 
 <p class="muted small">{{ DISCLAIMER_UA }}</p>
 
-{# decision actions #}
-{% if app.status == Status.PROCESSED %}
+{# decision actions: only the owner or an administrator (the server checks it again) #}
+{% set may_act = user and (user.is_admin or app.owner_id == user.id) %}
+{% if not may_act %}
+<div class="panel"><p class="muted">Заявка оператора «{{ app.owner.display_name if app.owner else '—' }}»: змінювати її може лише він або адміністратор.</p></div>
+{% elif app.status == Status.PROCESSED %}
 <div class="panel">
   <h2>Рішення</h2>
   {% if app.has_assessment %}
@@ -274,7 +277,8 @@
     {% for h in app.history %}
       <tr><td class="muted small">{{ h.at|dt }}</td>
           <td>{{ UA_STATUS.get(h.from_status, h.from_status or '—') }} → <strong>{{ UA_STATUS.get(h.to_status, h.to_status) }}</strong></td>
-          <td class="muted">{{ h.comment or '' }}</td></tr>
+          <td class="muted">{{ h.comment or '' }}</td>
+          <td class="muted small">{{ h.user.display_name if h.user else 'система' }}</td></tr>
     {% endfor %}
     </tbody>
   </table>

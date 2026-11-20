@@ -14,8 +14,9 @@ from datetime import datetime
 from pathlib import Path
 
 from core.service import InputError, get_engine
-from web import config, service
+from web import audit, config, service
 from web.db import init_db, session_scope
+from web.logsetup import setup_logging
 from web.models import Status
 
 log = logging.getLogger("web.worker")
@@ -34,6 +35,9 @@ def _finalize_success(app_id: int, data: dict, result_dir: Path) -> None:
         app.apply_summary(data["summary"], data.get("revision", 1), data.get("simulated", False))
         app.updated_at = datetime.now()
         service.transition(s, app, Status.PROCESSED)
+        seconds = (app.finished_at - app.started_at).total_seconds() if app.started_at else 0.0
+        audit.record(s, None, "processing_finished", "application", app_id,
+                     details=f"seconds={seconds:.1f} category={app.damage_category or '-'}")
 
 
 def _finalize_failure(app_id: int, message: str) -> None:
@@ -44,6 +48,7 @@ def _finalize_failure(app_id: int, message: str) -> None:
         app.error = message
         app.updated_at = datetime.now()
         service.transition(s, app, Status.FAILED)
+        audit.record(s, None, "processing_failed", "application", app_id, result="error", details=message[:300])
 
 
 def process_one(engine, app_id: int) -> None:
@@ -52,6 +57,8 @@ def process_one(engine, app_id: int) -> None:
         if app is None:
             return
         inputs = [Path(f.path) for f in app.files]
+        audit.record(s, None, "processing_started", "application", app_id,
+                     details=f"engine={getattr(engine, 'name', '?')} files={len(inputs)}")
     out_dir = config.RESULTS_DIR / str(app_id)
 
     last = [0.0]
@@ -82,6 +89,7 @@ def process_one(engine, app_id: int) -> None:
 
 def run() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    setup_logging()
     init_db()
     with session_scope() as s:
         requeued = service.requeue_stuck(s)
