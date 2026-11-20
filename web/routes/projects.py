@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from web import service
 from web.db import session_scope
-from web.models import Application, Project, Status
+from web.models import Project, Status
 from web.templating import render
 
 router = APIRouter()

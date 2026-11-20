@@ -151,6 +151,16 @@ uv run python -m tools.consistency output/consistency.csv
 `result.json`, views and PDF out), `core/simulator.py` answers the same calls from a pack of recorded cases
 (`tools/make_pack.py`). The task and the result format: `docs/web_system.md`.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main` and `dev`: `ruff check .`,
+`pytest` on the simulator engine (no Gemini calls, no model weights) and a release package (`git archive` of the
+commit with `uv.lock` and `BUILD_INFO`). On a `v*` tag the package is attached to the GitHub release.
+
+The recorded cases for the simulator come from `devpack.zip` in release v1.0 and are cached under the key
+`devpack-v1.0`. **If `devpack.zip` is replaced, change the key in `ci.yml` in the same pull request**, otherwise
+CI keeps testing against the old cached copy.
+
 ## Limitations and known issues
 
 - A preliminary visual assessment for ordering inspections, not a technical inspection: load-bearing
