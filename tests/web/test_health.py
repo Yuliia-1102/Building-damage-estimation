@@ -23,3 +23,14 @@ def test_health_fails_when_queue_is_stuck(client, db):
     r = client.get("/healthz")
     assert r.status_code == 503
     assert r.json()["ok"] is False and r.json()["stuck_in_queue"] == 1
+
+
+def test_health_hides_error_details(client, monkeypatch):
+    import web.server
+
+    def broken(_sql):                     # the database check inside /healthz fails
+        raise RuntimeError("/secret/path/web.db is locked")
+    monkeypatch.setattr(web.server, "text", broken)
+    r = client.get("/healthz")
+    assert r.status_code == 503
+    assert r.json() == {"ok": False, "db": "error"}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Вхід{% endblock %}
+{% block content %}
+<div class="panel" style="max-width:380px;margin:3rem auto">
+  <h1>Вхід</h1>
+  {% if error %}<div class="notice err">{{ error }}</div>{% endif %}
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Користувач<br><input type="text" name="username" value="{{ username }}" autofocus required></label><br><br>
+    <label>Пароль<br><input type="password" name="password" required></label><br><br>
+    <button class="btn btn-primary" type="submit">Увійти</button>
+  </form>
+  <p class="muted small">Навчальні облікові записи: admin, operator1, operator2 (пароль — у README).</p>
+</div>
+{% endblock %}

@@ -16,8 +16,13 @@
       <a href="/projects" class="{% block nav_projects %}{% endblock %}">Проєкти</a>
       <a href="/statistics" class="{% block nav_stats %}{% endblock %}">Статистика</a>
       <a href="/materials" class="{% block nav_materials %}{% endblock %}">Ціни і матеріали</a>
+      {% if user and user.is_admin %}<a href="/admin/audit" class="{% block nav_admin %}{% endblock %}">Адміністрування</a>{% endif %}
     </nav>
+    {% if user %}
     <a class="btn btn-primary" href="/applications/new">+ Нова заявка</a>
+    <span class="muted small">{{ user.display_name }} ({{ 'адміністратор' if user.is_admin else 'оператор' }})</span>
+    <form method="post" action="/logout" style="display:inline"><button class="btn btn-sm" type="submit">Вийти</button></form>
+    {% endif %}
   </header>
   <main class="wrap">
     {% block content %}{% endblock %}

@@ -18,6 +18,7 @@
   <div class="meta">
     <span>{{ {'photo':'1 фото','photos':'кілька фото','video':'відео'}.get(app.mode, app.mode or '—') }}</span>
     {% if app.project %}<span>· {{ app.project.name }}</span>{% endif %}
+    {% if app.owner %}<span>· {{ app.owner.display_name }}</span>{% endif %}
     <span>· {{ app.created_at|dt }}</span>
   </div>
 </a>
