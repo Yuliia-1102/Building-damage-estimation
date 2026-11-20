@@ -145,7 +145,12 @@ uv run python -m tools.run_testset testset/cases.csv --repeat 3 --no-decision-ca
 uv run python -m tools.consistency output/consistency.csv
 ```
 
-## Operator web system (stage 3)
+## Operator web system (stage 3, version 2.0)
+
+Installation from a clean checkout, training accounts, migration, backup and restore, the operations report:
+**[web/README.md](web/README.md)**. Releases: tags `v1.0` (operator web system) and `v2.0` (accounts and roles,
+admin panel, audit log). CI: `.github/workflows/ci.yml` (ruff, tests on the simulator, release package).
+
 
 `core/service.py` is the processing entry point for the web system (files in, a result folder with
 `result.json`, views and PDF out), `core/simulator.py` answers the same calls from a pack of recorded cases
