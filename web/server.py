@@ -98,8 +98,10 @@ def create_app() -> FastAPI:
                 limit = datetime.now() - timedelta(minutes=STUCK_QUEUE_MINUTES)
                 stuck = s.scalar(select(func.count()).select_from(Application).where(
                     Application.status == Status.CREATED, Application.queued_at < limit))
-        except Exception as e:
-            return JSONResponse({"ok": False, "db": "error", "detail": str(e)[:200]}, status_code=503)
+        except Exception:
+            # the details stay in the log: /healthz is public and must not show server paths or errors
+            logging.getLogger("web.health").exception("healthz: database check failed")
+            return JSONResponse({"ok": False, "db": "error"}, status_code=503)
         ok = stuck == 0
         return JSONResponse({"ok": ok, "db": "ok", "stuck_in_queue": stuck}, status_code=200 if ok else 503)
 
