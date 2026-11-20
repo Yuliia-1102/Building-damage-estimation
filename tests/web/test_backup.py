@@ -63,3 +63,28 @@ def test_paths_are_moved_to_the_new_data_folder(tmp_path):
     assert backup._rewrite_paths(db, "/old/data", "/new/place") == 2
     with sqlite3.connect(db) as c:
         assert c.execute("SELECT path FROM application_file").fetchone()[0] == "/new/place/uploads/1/a.jpg"
+
+
+def test_damaged_archive_changes_nothing(client, create, pump, db, tmp_path, materials):
+    """A half-downloaded archive is refused before the current data are deleted (review on PR #6)."""
+    from web import backup, config
+    aid = create("photo_single", "живі дані")
+    pump()
+    archive = backup.create(tmp_path / "backups")
+    # The archive still opens (its index is intact), but the bytes of one file inside are spoiled.
+    import zipfile
+    data = bytearray(archive.read_bytes())
+    with zipfile.ZipFile(archive) as z:
+        info = z.getinfo("web.db")
+    start = info.header_offset + 30 + len(info.filename) + len(info.extra)
+    for i in range(start + 10, start + 60):
+        data[i] ^= 0xFF
+    damaged = tmp_path / "damaged.zip"
+    damaged.write_bytes(bytes(data))
+
+    with pytest.raises(backup.BadArchive):
+        backup.restore(damaged)
+
+    assert (config.UPLOADS_DIR / str(aid)).exists()
+    with db() as s:
+        assert [a.title for a in s.scalars(select(Application)).all()] == ["живі дані"]

@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import zlib
 from datetime import datetime
 from pathlib import Path
 
@@ -113,7 +114,28 @@ def verify(manifest: dict) -> list[str]:
     return problems
 
 
+class BadArchive(ValueError):
+    """The backup archive is damaged or is not a backup of this system; nothing was changed."""
+
+
+def check_archive(archive: Path) -> dict:
+    """Open the archive and check every file in it before anything is deleted. Returns the manifest."""
+    try:
+        with zipfile.ZipFile(archive) as z:
+            broken = z.testzip()                       # reads every member and checks its CRC
+            if broken:
+                raise BadArchive(f"{archive}: damaged file inside the archive: {broken}")
+            names = set(z.namelist())
+            if not {"manifest.json", "web.db"} <= names:
+                raise BadArchive(f"{archive}: not a backup of the web system (no manifest.json / web.db)")
+            return json.loads(z.read("manifest.json"))
+    except (zipfile.BadZipFile, zlib.error, OSError, json.JSONDecodeError) as e:
+        raise BadArchive(f"{archive}: cannot be read as a backup ({e})") from e
+
+
 def restore(archive: Path) -> dict:
+    # Check first: a half-downloaded or damaged archive must not cost the current data (review on PR #6).
+    check_archive(archive)
     from web.db import engine
     engine.dispose()      # close pooled connections before the database file is replaced
     with zipfile.ZipFile(archive) as z:
@@ -151,7 +173,11 @@ def main() -> None:
         print(f"backup: {path}")
         print(json.dumps(manifest["report"], ensure_ascii=False))
     elif a.cmd == "restore":
-        result = restore(a.archive)
+        try:
+            result = restore(a.archive)
+        except BadArchive as e:
+            print(f"NOT RESTORED, the current data are unchanged: {e}")
+            sys.exit(2)
         print(f"restored from {a.archive} (taken {result['manifest']['created']}, "
               f"commit {result['manifest']['commit']}); file paths rewritten: {result['paths_rewritten']}")
         print(json.dumps(_report(config.DB_PATH), ensure_ascii=False))
