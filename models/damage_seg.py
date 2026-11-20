@@ -184,7 +184,7 @@ def main():
     for f in files:
         out = Path(a.out) if a.out else f.parent
         out.mkdir(parents=True, exist_ok=True)
-        probs = seg.predict_probs(f, progress=lambda d, n: print(f"\r{f.name}: crop {d}/{n}", end=""))
+        probs = seg.predict_probs(f, progress=lambda d, n, f=f: print(f"\r{f.name}: crop {d}/{n}", end=""))
         mask = probs.argmax(-1).astype(np.uint8)
         Image.fromarray(mask).save(out / f"{f.stem}_mask.png")              # pixel value = class id
         Image.fromarray(overlay(f, mask)).save(out / f"{f.stem}_overlay.png")

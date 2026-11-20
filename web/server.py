@@ -15,21 +15,27 @@ log line to the audit row and the application (docs/v2/observability.md).
 import logging
 import time
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func, select, text
 
 from web import audit, config
 from web.auth import COOKIE, user_from_cookie
 from web.db import init_db, session_scope
 from web.logsetup import setup_logging
+from web.models import Application, Status
 
 HERE = Path(__file__).resolve().parent
 PUBLIC = ("/login", "/healthz", "/static/")
 
 access_log = logging.getLogger("web.access")
+
+# An application waiting in the queue longer than this means the worker is not running.
+STUCK_QUEUE_MINUTES = 5
 
 
 def create_app() -> FastAPI:
@@ -85,7 +91,17 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():
-        return {"ok": True}
+        """200 if the system works; 503 if the database is unreachable or the queue does not move."""
+        try:
+            with session_scope() as s:
+                s.execute(text("SELECT 1"))
+                limit = datetime.now() - timedelta(minutes=STUCK_QUEUE_MINUTES)
+                stuck = s.scalar(select(func.count()).select_from(Application).where(
+                    Application.status == Status.CREATED, Application.queued_at < limit))
+        except Exception as e:
+            return JSONResponse({"ok": False, "db": "error", "detail": str(e)[:200]}, status_code=503)
+        ok = stuck == 0
+        return JSONResponse({"ok": ok, "db": "ok", "stuck_in_queue": stuck}, status_code=200 if ok else 503)
 
     return app
 

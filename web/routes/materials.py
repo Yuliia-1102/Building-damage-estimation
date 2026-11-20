@@ -49,13 +49,13 @@ def _parse(value: str, valid_from: str) -> tuple[float, date]:
     try:
         number = float(value.replace(",", ".").replace(" ", ""))
     except ValueError:
-        raise ValueError("Ціна має бути числом.")
+        raise ValueError("Ціна має бути числом.") from None
     if number < 0:
         raise ValueError("Ціна не може бути від'ємною.")
     try:
         day = date.fromisoformat(valid_from) if valid_from else date.today()
     except ValueError:
-        raise ValueError("Неправильна дата.")
+        raise ValueError("Неправильна дата.") from None
     return number, day
 
 
