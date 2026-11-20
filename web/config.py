@@ -32,6 +32,24 @@ def max_upload_mb() -> int:
         return 300
 
 
+class DataDirError(RuntimeError):
+    """The configured data folder does not exist (see check_data_dir)."""
+
+
+def check_data_dir() -> None:
+    """Stop when DAMAGE_WEB_DATA points to a folder that does not exist.
+
+    Without this check a typo in the path silently created a new, empty database: the server started, the
+    board was empty and new applications went to a database the worker did not read (incident drill,
+    20 Nov 2026). The default data/ folder is still created on the first start.
+    """
+    env = os.environ.get("DAMAGE_WEB_DATA")
+    if env and not Path(env).is_dir():
+        raise DataDirError(f"DAMAGE_WEB_DATA={env} does not exist. Fix the path, or create the folder "
+                           f"first if a new empty database is really wanted.")
+
+
 def ensure_dirs() -> None:
+    check_data_dir()
     for d in (DATA_DIR, UPLOADS_DIR, RESULTS_DIR):
         d.mkdir(parents=True, exist_ok=True)
