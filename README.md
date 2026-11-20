@@ -5,9 +5,9 @@ Photos or a video of a damaged building in, a preliminary report out: damage cat
 list of works, and a restoration cost shown as a range, with PDF export. Screening and triage
 only - it orders buildings for on-site inspection and does not replace it.
 
-**Project documentation (Confluence):** https://itaimanagement.atlassian.net/wiki/spaces/~71202076e469e592204d5686776fae36e371a4/overview
-**Jira board:** https://itaimanagement.atlassian.net/jira/software/projects/SCRUM/boards/1
-**Operator web system (install, run, backup, Windows):** [web/README.md](web/README.md)
+- **Project documentation (Confluence):** https://itaimanagement.atlassian.net/wiki/spaces/~71202076e469e592204d5686776fae36e371a4/overview
+- **Jira board:** https://itaimanagement.atlassian.net/jira/software/projects/SCRUM/boards/1
+- **Operator web system (install, run, backup, Windows):** [web/README.md](web/README.md)
 
 ## Setup
 
