@@ -65,6 +65,38 @@ DAMAGE_ENGINE=simulator uv run python -m web.worker
 Якщо задано `DAMAGE_WEB_DATA`, а такої папки немає, сервер і обробник не стартують і пишуть, що шлях
 неправильний (інакше одруківка мовчки створила б нову порожню базу — див. навчальний інцидент).
 
+### Windows (PowerShell)
+
+Команди вище написані для bash (macOS, Linux, Git Bash). У PowerShell змінна задається окремим рядком,
+`curl` треба викликати як `curl.exe`, замість `unzip` — `Expand-Archive`, а `&&` у Windows PowerShell 5 не працює.
+Те саме по кроках:
+
+```powershell
+git clone https://github.com/Yuliia-1102/Building-damage-estimation.git
+cd Building-damage-estimation
+git checkout v2.0
+uv sync --frozen
+
+# записані кейси для симулятора
+curl.exe -L -o devpack.zip https://github.com/Yuliia-1102/Building-damage-estimation/releases/download/v1.0/devpack.zip
+Expand-Archive devpack.zip -DestinationPath .
+Remove-Item devpack.zip                       # має з'явитися devpack\index.json
+
+# (за потреби) відновити навчальні дані з резервної копії - до запуску сервера
+uv run python -m web.backup restore C:\шлях\до\backup-<дата>.zip
+
+# вікно 1: вебсервер
+$env:DAMAGE_ENGINE = "simulator"
+uv run uvicorn web.server:app --port 8000
+
+# вікно 2: фоновий обробник
+$env:DAMAGE_ENGINE = "simulator"
+uv run python -m web.worker
+```
+
+Змінна `$env:...` діє лише в тому вікні PowerShell, де її задали, тому її потрібно задати в обох вікнах.
+Відкрити http://localhost:8000, увійти як `admin` / `demo2026`, перевірити http://localhost:8000/healthz.
+
 ## Версія 2.0: ролі, адміністрування, журнал дій
 
 - Кожна заявка має власника. Затвердити, відхилити, повторити, перерахувати, додати до проєкту може лише власник
