@@ -81,7 +81,7 @@ def main() -> None:
                 shutil.copy2(s, dst)
             files.append(dst)
         data = engine.process(files, out / "results" / cid, case_id=cid,
-                              progress=lambda share, text: log.info("%s: %3.0f%% %s", cid, share * 100, text))
+                              progress=lambda share, text, cid=cid: log.info("%s: %3.0f%% %s", cid, share * 100, text))
         s = data["summary"]
         previous[cid] = {
             "case_id": cid, "kind": row["kind"], "mode": data["mode"], "inputs": describe_inputs(files),
