@@ -1,4 +1,4 @@
-# Continuous integration: every pull request and every change of main.
+# Continuous integration: every pull request, every push to main and dev, and every version tag.
 #   1. get the code and install the locked dependencies (uv.lock), without the model weights;
 #   2. static checks (ruff);
 #   3. automated tests on the simulator engine (recorded cases, no weights, no API keys);
@@ -13,7 +13,7 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write   # only used on tags, to publish the release package
+  contents: read    # default for all jobs; only the package job gets write access
 
 jobs:
   tests:
@@ -53,6 +53,8 @@ jobs:
   package:
     needs: tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to attach the package to the GitHub release on a tag
     steps:
       - uses: actions/checkout@v4
 

@@ -5,6 +5,7 @@ runs in the worker process (web/worker.py).
 """
 import json
 from datetime import datetime
+from html import escape
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
@@ -22,7 +23,7 @@ router = APIRouter()
 
 def error_page(status_code: int, text: str, back: str = "/board") -> HTMLResponse:
     """A short error page. 400 validation, 403 no permission, 404 not found, 409 conflict - never 500."""
-    return HTMLResponse(f'<p>{text}</p><p><a href="{back}">Назад</a></p>', status_code=status_code)
+    return HTMLResponse(f'<p>{escape(text)}</p><p><a href="{escape(back)}">Назад</a></p>', status_code=status_code)
 
 
 def _owned(s, request: Request, app_id: int, action: str):

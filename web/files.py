@@ -31,8 +31,8 @@ def check_mode(names: list[str]) -> str:
     except InputError as e:
         msg = str(e)
         if "one video" in msg:
-            raise UploadRejected("Одне відео або кілька фото, не разом.")
-        raise UploadRejected(f"Неприйнятний набір файлів: {msg}")
+            raise UploadRejected("Одне відео або кілька фото, не разом.") from e
+        raise UploadRejected(f"Неприйнятний набір файлів: {msg}") from e
 
 
 def save_uploads(app_id: int, uploads: list[UploadFile]) -> list[dict]:

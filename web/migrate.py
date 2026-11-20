@@ -54,8 +54,31 @@ def report(engine: Engine) -> dict:
     return out
 
 
-def migrate(engine: Engine) -> dict:
-    """Bring the database to CURRENT_VERSION. Returns {"before": report, "after": report}."""
+def migrate(engine: Engine, attempts: int = 5) -> dict:
+    """Bring the database to CURRENT_VERSION. Returns {"before": report, "after": report}.
+
+    The server and the worker both migrate on start. When they start together on a v1.0 database, both
+    may try to create the same table or column, and the slower one gets "already exists" / "duplicate
+    column" or a unique-name error. Every step is idempotent, so the loser simply runs the migration
+    again and finds the work done (review question on PR #5).
+    """
+    import time
+
+    from sqlalchemy.exc import IntegrityError, OperationalError
+    for attempt in range(1, attempts + 1):
+        try:
+            return _migrate_once(engine)
+        except (OperationalError, IntegrityError) as e:
+            msg = str(e.orig if hasattr(e, "orig") else e).lower()
+            raced = any(s in msg for s in ("already exists", "duplicate column", "unique constraint", "locked"))
+            if not raced or attempt == attempts:
+                raise
+            log.info("migration: another process is migrating the same database (%s), retry %d", msg, attempt)
+            time.sleep(0.2 * attempt)
+    raise AssertionError("unreachable")
+
+
+def _migrate_once(engine: Engine) -> dict:
     from web.auth import ensure_demo_users
     from web.db import Base
     from web.models import LEGACY_USERNAME, Application, SchemaVersion, User

@@ -42,6 +42,16 @@ def test_wrong_password_is_refused_and_recorded(client, db):
     r = TestClient(app).post("/login", data={"username": "operator1", "password": "wrong"})
     assert r.status_code == 401 and "Неправильне" in r.text
     assert _events(db, action="login_failed")[-1].result == "denied"
+    assert _events(db, action="login_failed")[-1].object_id == "operator1"     # a real account: kept
+
+
+def test_unknown_name_is_not_stored(client, db):
+    """A password typed into the name field must not end up in the audit log (review on PR #5)."""
+    from fastapi.testclient import TestClient
+    from web.server import app
+    TestClient(app).post("/login", data={"username": "demo2026", "password": ""})
+    event = _events(db, action="login_failed")[-1]
+    assert event.object_id == "(unknown name)" and "demo2026" not in (event.details or "")
 
 
 def test_deactivated_user_cannot_sign_in(admin_client, db):

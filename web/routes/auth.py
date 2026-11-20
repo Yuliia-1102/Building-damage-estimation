@@ -1,10 +1,12 @@
 """Sign-in and sign-out (v2.0). Accounts are prepared in advance (web/auth.py); no registration."""
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
 
 from web import audit
 from web.auth import COOKIE, SESSION_HOURS, authenticate, make_cookie
 from web.db import session_scope
+from web.models import User
 from web.templating import render
 
 router = APIRouter()
@@ -26,7 +28,12 @@ def login(request: Request, username: str = Form(""), password: str = Form(""), 
     with session_scope() as s:
         user = authenticate(s, username, password)
         if user is None:
-            audit.record(s, None, "login_failed", "user", (username or "").strip()[:40], result="denied")
+            # Only a name that belongs to an account is stored: a password typed into the name field by
+            # mistake must not end up in the audit log (review question on PR #5).
+            typed = (username or "").strip()
+            known = s.scalar(select(User.id).where(User.username == typed)) is not None
+            audit.record(s, None, "login_failed", "user", typed[:40] if known else "(unknown name)",
+                         result="denied")
             error = "Неправильне ім'я користувача або пароль."
         else:
             audit.record(s, user, "login", "user", user.id)
