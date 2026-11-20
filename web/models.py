@@ -28,6 +28,24 @@ class Status:
     # Shown on the board in this order (left to right).
     BOARD = [CREATED, PROCESSING, PROCESSED, APPROVED, DECLINED, FAILED]
 
+    # The only allowed transitions (the state model in docs/v2/state_model.md). A status may also "move" to
+    # itself only where listed: Created -> Created is a re-queue (duplicate merged into it, operator continued).
+    TRANSITIONS: dict[str, frozenset[str]] = {
+        CREATED: frozenset({PROCESSING, DECLINED, CREATED}),     # picked by the worker / rejected duplicate
+        PROCESSING: frozenset({PROCESSED, FAILED, CREATED}),    # finished / failed / worker restarted
+        PROCESSED: frozenset({APPROVED, DECLINED, CREATED}),    # operator decision / merged files re-process
+        APPROVED: frozenset({PROCESSED, CREATED}),              # reopened / merged files re-process
+        DECLINED: frozenset({PROCESSED, CREATED}),
+        FAILED: frozenset({CREATED, DECLINED}),                 # retry / declined
+    }
+
+    @classmethod
+    def allowed(cls, frm: str | None, to: str) -> bool:
+        """True if an application may go from `frm` to `to`; None is a new application (only to Created)."""
+        if frm is None:
+            return to == cls.CREATED
+        return to in cls.TRANSITIONS.get(frm, frozenset())
+
 
 UA_STATUS = {
     Status.CREATED: "Створено",

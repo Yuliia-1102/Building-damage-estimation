@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from web import config
@@ -15,9 +15,21 @@ from web.models import Application, ApplicationFile, Project, Status, StatusChan
 
 # ---------- status transitions ----------
 
+class InvalidTransition(ValueError):
+    """The state model does not allow this change of status (a bug in the caller, not a user error)."""
+
+
+class Conflict(Exception):
+    """Someone else changed the application first (for example two operators decided at the same time)."""
+
+
 def transition(session: Session, app: Application, to_status: str, comment: str | None = None) -> None:
-    """Change an application's status and record it in status_change with the right timestamps."""
+    """Change an application's status and record it in status_change with the right timestamps.
+
+    Raises InvalidTransition when Status.TRANSITIONS does not allow the change."""
     frm = app.status
+    if not Status.allowed(frm, to_status):
+        raise InvalidTransition(f"application {app.id}: {frm} -> {to_status} is not allowed")
     now = datetime.now()
     app.status = to_status
     if to_status == Status.CREATED:
@@ -35,6 +47,32 @@ def transition(session: Session, app: Application, to_status: str, comment: str 
         if comment:
             app.decision_comment = comment
     session.add(StatusChange(application_id=app.id, from_status=frm, to_status=to_status, comment=comment))
+
+
+def decide(session: Session, app_id: int, to_status: str, comment: str | None = None) -> Application:
+    """Approve or decline a Processed application exactly once, even when two requests arrive together.
+
+    The status is changed by one conditional UPDATE (... WHERE status = 'Processed'): the database lets only
+    one of two concurrent requests match the row; the other gets Conflict instead of a second decision."""
+    if to_status not in (Status.APPROVED, Status.DECLINED):
+        raise InvalidTransition(f"decide() cannot set {to_status}")
+    now = datetime.now()
+    values = {"status": to_status, "decided_at": now, "updated_at": now}
+    if comment:
+        values["decision_comment"] = comment
+    result = session.execute(
+        update(Application)
+        .where(Application.id == app_id, Application.status == Status.PROCESSED)
+        .values(**values)
+        .execution_options(synchronize_session=False))
+    if result.rowcount != 1:
+        raise Conflict(f"application {app_id} is no longer waiting for a decision")
+    session.add(StatusChange(application_id=app_id, from_status=Status.PROCESSED, to_status=to_status,
+                             comment=comment))
+    session.flush()
+    app = session.get(Application, app_id)
+    session.refresh(app)
+    return app
 
 
 # ---------- creating applications ----------
